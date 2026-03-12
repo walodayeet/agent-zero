@@ -48,6 +48,7 @@ _last_frontend_reload_notification_at = 0.0
 
 
 class PluginMetadata(BaseModel):
+    name: str = ""
     title: str = ""
     description: str = ""
     version: str = ""
@@ -567,7 +568,7 @@ def send_frontend_reload_notification(plugin_names: list[str] | None = None):
     """If the plugin changed has webui extensions, notify frontend to reload the page"""
     global _last_frontend_reload_notification_at
 
-    display_time = 3
+    display_time = 5
     now = time.monotonic()
     if now - _last_frontend_reload_notification_at < display_time:
         return
