@@ -35,6 +35,10 @@ REQUIRED_RUNTIME_MARKERS = (
 
 class SelfUpdateManagerRuntimeSync(Extension):
     def execute(self, **kwargs):
+        from helpers import runtime
+
+        if not runtime.is_dockerized():
+            return
         result = ensure_self_update_manager_runtime_current()
         if result.get("updated"):
             PrintStyle.info("Self-update manager runtime synchronized:", result["target"])

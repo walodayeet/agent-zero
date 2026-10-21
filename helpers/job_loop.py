@@ -17,9 +17,9 @@ async def run_loop():
     global pause_time, keep_running
 
     while True:
-        if runtime.is_development():
-            # Signal to container that the job loop should be paused
-            # if we are runing a development instance to avoid duble-running the jobs
+        if runtime.is_development() and not runtime.is_local_runtime():
+            # Signal to the dockerized counterpart that its job loop should pause
+            # so development instances don't run the same jobs twice.
             try:
                 await runtime.call_development_function(pause_loop)
             except Exception as e:

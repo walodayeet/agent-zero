@@ -164,7 +164,10 @@ TAR_SUFFIXES = (".tar.gz", ".tar.bz2", ".tar.xz", ".tar", ".tgz", ".tbz", ".tbz2
 def resolve_archive_path(path: str) -> Path:
     base = Path(files.get_base_dir()).resolve()
     candidate = Path(path)
-    resolved = candidate.resolve() if candidate.is_absolute() else (base / candidate).resolve()
+    if candidate.is_absolute():
+        resolved = Path(files.get_abs_path(path)).resolve()
+    else:
+        resolved = (base / candidate).resolve()
     try:
         resolved.relative_to(base)
     except ValueError as exc:

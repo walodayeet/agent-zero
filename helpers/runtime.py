@@ -65,14 +65,19 @@ def is_development() -> bool:
 
 
 def is_local_runtime() -> bool:
-    """Bare-metal mode: run the framework and all execution locally (no RFC/Docker counterpart)."""
+    """Bare-metal mode: run the framework and all execution locally (no RFC/Docker counterpart).
+
+    Explicit opt-in via --local_runtime / A0_LOCAL_RUNTIME wins either way. Without it, a
+    non-dockerized process with no RFC counterpart configured (no RFC_PASSWORD) is bare metal,
+    while the documented IDE workflow (RFC password set) keeps delegating to Docker.
+    """
     arg = get_arg("local_runtime")
     if arg is not None:
         return str(arg).lower().strip() in ("true", "1", "yes", "on")
-    return (
-        str(dotenv.get_dotenv_value("A0_LOCAL_RUNTIME", "")).lower().strip()
-        in ("true", "1", "yes", "on")
-    )
+    explicit = str(dotenv.get_dotenv_value("A0_LOCAL_RUNTIME", "")).lower().strip()
+    if explicit:
+        return explicit in ("true", "1", "yes", "on")
+    return not is_dockerized() and not dotenv.get_dotenv_value(dotenv.KEY_RFC_PASSWORD, "")
 
 
 def get_local_url():

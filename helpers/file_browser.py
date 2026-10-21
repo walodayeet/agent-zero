@@ -450,9 +450,9 @@ class FileBrowser:
 
     def get_files(self, current_path: str = "") -> Dict:
         try:
-            current_path = self._map(current_path)
+            mapped_path = self._map(current_path)
             # Resolve the full path while preventing directory traversal
-            full_path = (self.base_dir / current_path).resolve()
+            full_path = (self.base_dir / mapped_path).resolve()
             if not str(full_path).startswith(str(self.base_dir)):
                 raise ValueError("Invalid path")
             if not full_path.exists():
@@ -468,22 +468,36 @@ class FileBrowser:
 
             # Get parent directory path if not at root
             parent_path = ""
-            if current_path:
+            if mapped_path and mapped_path != ".":
                 try:
                     # Get the absolute path of current directory
-                    current_abs = (self.base_dir / current_path).resolve()
+                    current_abs = (self.base_dir / mapped_path).resolve()
 
                     # parent_path is empty only if we're already at root
                     if str(current_abs) != str(self.base_dir):
-                        parent_path = str(Path(current_path).parent)
+                        parent_path = str(Path(mapped_path).parent)
 
                 except Exception:
                     parent_path = ""
 
+            if self.local_root:
+                # keep the docker-style display the UI expects
+                rel = "" if mapped_path in ("", ".") else mapped_path
+                display_path = "/a0" + (f"/{rel}" if rel else "")
+                if not parent_path:
+                    display_parent = ""
+                elif parent_path == ".":
+                    display_parent = "/a0"
+                else:
+                    display_parent = f"/a0/{parent_path}"
+            else:
+                display_path = current_path
+                display_parent = parent_path
+
             return {
                 "entries": all_entries,
-                "current_path": current_path,
-                "parent_path": parent_path
+                "current_path": display_path,
+                "parent_path": display_parent,
             }
 
         except Exception as e:
@@ -520,6 +534,10 @@ def prepare_files_download(paths, current_path=""):
     paths = normalize_paths(paths)
     if not paths:
         raise ValueError("No files selected.")
+    # bare metal: /a0/... display paths must resolve to real host paths
+    paths = [files.get_abs_path(path) if str(path).startswith("/a0") else path for path in paths]
+    if str(current_path).startswith("/a0"):
+        current_path = files.get_abs_path(current_path)
     limit = FileBrowser.max_file_bytes()
     remote = [file_connections.is_remote(path) for path in paths]
     if any(remote) and not all(remote):

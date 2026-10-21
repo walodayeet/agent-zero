@@ -468,9 +468,7 @@ def load_skill_for_agent(
         return f"Error: skill '{skill_name}' not found"
 
     # Get runtime path
-    runtime_path = str(skill.path)
-    if runtime.is_development():
-        runtime_path = files.normalize_a0_path(str(skill.path))
+    runtime_path = files.display_path(str(skill.path))
 
     lines = [f"Skill: {skill.name}", f"Path: {runtime_path}"]
 
@@ -536,8 +534,8 @@ def _get_skill_files(skill_dir: Path) -> str:
         )
     )
 
-    if tree and runtime.is_development():
-        runtime_path = files.normalize_a0_path(str(skill_dir))
+    if tree:
+        runtime_path = files.display_path(str(skill_dir))
         tree = tree.replace(str(skill_dir), runtime_path)
 
     return str(tree)

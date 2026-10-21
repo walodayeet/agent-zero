@@ -49,9 +49,7 @@ def _resolve_workdir(agent: Agent) -> str:
     project_name = projects.get_context_project_name(agent.context)
     if project_name:
         folder = projects.get_project_folder(project_name)
-        if runtime.is_development():
-            folder = files.normalize_a0_path(folder)
-        return folder
+        return files.display_path(folder)
     return get_settings_for_prompt()["workdir_path"]
 
 

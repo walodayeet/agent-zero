@@ -14,6 +14,12 @@ from helpers.file_transfers import stream_file_download
 
 def resolve_download_path(path: str) -> str:
     """Resolve a requested download path from the File Browser root."""
+    if runtime.is_local_runtime():
+        return str(
+            file_archives.resolve_download_path(
+                files.get_abs_path(path), Path(files.get_base_dir())
+            )
+        )
     return str(file_archives.resolve_download_path(path, Path("/")))
 
 

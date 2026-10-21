@@ -44,13 +44,25 @@ class AgentZeroAdapter(TerminalAgentAdapter):
         if host:
             return host
         env_host = os.environ.get("AGENT_ZERO_HOST", "").strip()
-        return env_host or DEFAULT_HOST
+        return env_host or _default_host()
 
     def auth_status(self, config: dict[str, Any] | None = None) -> dict[str, Any]:
         host = self.resolve_host(config)
         if _probe(host):
             return {"connected": True, "mode": "external", "auth_path": host}
         return {"connected": False, "mode": "", "auth_path": host}
+
+
+def _default_host() -> str:
+    """The instance hosting this plugin: port 80 in the image, the real web port on bare metal."""
+    try:
+        from helpers import runtime
+
+        if runtime.is_local_runtime():
+            return f"http://127.0.0.1:{runtime.get_web_ui_port()}"
+    except Exception:
+        pass
+    return DEFAULT_HOST
 
 
 def _probe(host_url: str) -> bool:

@@ -575,7 +575,14 @@ def make_dirs(relative_path: str):
 
 def _resolve_path(*relative_paths):
     if len(relative_paths) == 1 and os.path.isabs(relative_paths[0]):
-        return relative_paths[0]
+        path = relative_paths[0]
+        if path == "/a0" or path.startswith("/a0/"):
+            from helpers import runtime
+
+            if runtime.is_local_runtime():
+                rel = path[len("/a0"):].lstrip("/")
+                return os.path.join(_base_dir, rel) if rel else _base_dir
+        return path
     return os.path.join(_base_dir, *relative_paths)
 
 
@@ -610,9 +617,20 @@ def fix_dev_path(path: str):
     from helpers.runtime import is_development
 
     if is_development():
+        if path == "/a0":
+            return get_abs_path()
         if path.startswith("/a0/"):
-            path = path.replace("/a0/", "")
+            path = path.replace("/a0/", "", 1)
     return get_abs_path(path)
+
+
+def display_path(path: str) -> str:
+    """Path shown to agents and UI: /a0/... in Docker, the real host path on bare metal."""
+    from helpers import runtime
+
+    if runtime.is_local_runtime():
+        return str(path)
+    return normalize_a0_path(str(path))
 
 
 def normalize_a0_path(path: str):

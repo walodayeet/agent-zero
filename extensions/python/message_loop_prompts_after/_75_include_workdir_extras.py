@@ -32,9 +32,7 @@ class IncludeWorkdirExtras(Extension):
             max_depth = project["file_structure"]["max_depth"]
             gitignore_raw = project["file_structure"]["gitignore"]
 
-            folder = projects.get_project_folder(project_name)
-            if runtime.is_development():
-                folder = files.normalize_a0_path(folder)
+            folder = files.display_path(projects.get_project_folder(project_name))
 
             file_structure = projects.get_file_structure(
                 project_name,

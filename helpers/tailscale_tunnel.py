@@ -169,7 +169,7 @@ def start_tailscaled(binary_path, notify=None):
 
     notify_info(
         notify,
-        "Starting Tailscale's background service inside this container...",
+        "Starting Tailscale's background service on this host...",
     )
 
     log_handle = TAILSCALE_DAEMON_LOG_PATH.open("ab")
@@ -213,7 +213,7 @@ def start_tailscaled(binary_path, notify=None):
     TAILSCALE_DAEMON_PID_PATH.unlink(missing_ok=True)
     message = (
         "Agent Zero downloaded Tailscale, but could not start the `tailscaled` "
-        "background service in this container."
+        "background service on this host."
     )
     if details:
         message = f"{message} Details: {details}"
@@ -271,7 +271,7 @@ def tailscale_up_failure_message(output, *, timed_out=False):
     else:
         message = (
             "Agent Zero ran `tailscale up`, but Tailscale did not finish joining "
-            "this container to your tailnet. Complete any Tailscale login or "
+            "this host to your tailnet. Complete any Tailscale login or "
             "admin approval it requested, then try Tailscale Remote Control again."
         )
     if details:
@@ -287,7 +287,7 @@ def run_tailscale_up(
 ):
     notify_info(
         notify,
-        "Tailscale needs this container to join your tailnet. Running `tailscale up` now...",
+        "Tailscale needs this host to join your tailnet. Running `tailscale up` now...",
     )
     process = subprocess.Popen(
         tailscale_command(binary_path, ["up"], socket_path),
@@ -321,7 +321,7 @@ def run_tailscale_up(
             login_url = login_match.group(0).rstrip(".,)")
             notify_info(
                 notify,
-                "Open the Tailscale login link and approve this container. "
+                "Open the Tailscale login link and approve this host. "
                 "Agent Zero will continue when Tailscale finishes setup.",
                 {"provider": "tailscale", "url": login_url},
             )
@@ -452,7 +452,7 @@ class TailscaleTunnel(CliTunnelHelper):
             missing_binary_message=(
                 "Tailscale could not be prepared in this environment. Install "
                 "Tailscale, make sure the `tailscaled` service is available to "
-                "this container, enable Funnel for the tailnet, then try again."
+                "this host, enable Funnel for the tailnet, then try again."
             ),
             shutdown_command=[
                 "tailscale",
