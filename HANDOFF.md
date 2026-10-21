@@ -11,6 +11,19 @@ Paste this file to the next agent maintaining this host/checkout.
 - Runtime switch: `helpers/runtime.py::is_local_runtime()`.
   Docker/launcher flows must stay untouched; never make local-only behavior unconditional.
 
+## Platform matrix
+- Linux (Debian/Ubuntu, Arch/CachyOS): `install-baremetal.sh` + `run-baremetal.sh`.
+  apt/pacman, systemd optional. Arch uses per-package `pacman -S --needed` only.
+- macOS: `install-baremetal.sh` uses Homebrew; `--systemd` is skipped; Desktop
+  plugin (Xpra/XFCE) unavailable; LibreOffice is found in the app bundle.
+- Windows 10/11: `install-baremetal.ps1` + `run-baremetal.ps1`; winget packages;
+  junctions `C:\a0`, `C:\exe`, `C:\opt\venv[-a0]` when elevated. Desktop
+  plugin unavailable. The PowerShell path is implemented but not yet smoke-tested
+  on real Windows hardware; verify it first there.
+- Core cross-platform bits: `/a0` mapping uses `os.path`; code execution uses
+  `powershell.exe` + pywinpty on Windows; `find_soffice` checks app-bundle and
+  Program Files paths.
+
 ## Starting and installing
 ```bash
 ./run-baremetal.sh                       # manual start (A0_HOST/A0_PORT/A0_DATA_DIR/SEARXNG_URL)

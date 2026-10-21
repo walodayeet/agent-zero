@@ -96,6 +96,13 @@ done
 
 command -v python3 >/dev/null 2>&1 || die "python3 is required."
 
+PLATFORM="$(uname -s 2>/dev/null || echo unknown)"
+case "$PLATFORM" in
+  Darwin) PLATFORM_LABEL="macOS" ;;
+  Linux) PLATFORM_LABEL="Linux" ;;
+  *) PLATFORM_LABEL="$PLATFORM" ;;
+esac
+
 # ---------------------------------------------------------------- packages --
 APT_CORE=(
   python3 python3-venv python3-pip curl git ca-certificates
@@ -120,6 +127,9 @@ PACMAN_ARCHIVES=(7zip)
 PACMAN_DESKTOP=(xpra xorg-server-xvfb xfce4-session xfce4-panel xfwm4
   xfce4-settings thunar xfce4-terminal xdotool xorg-xrandr xorg-xauth dbus
   x11-apps x11vnc novnc)
+BREW_CORE=(ffmpeg tesseract ripgrep jq node p7zip)
+BREW_OFFICE=(libreoffice)
+BREW_ARCHIVES=(p7zip)
 
 as_root() {
   if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi
@@ -170,9 +180,43 @@ pac_install_group() {
   done
 }
 
+brew_install_group() {
+  local label="$1"; shift
+  [ "$#" -eq 0 ] && return 0
+  local pkg
+  info "Installing $label with Homebrew..."
+  for pkg in "$@"; do
+    if brew list --formula "$pkg" >/dev/null 2>&1 || brew list --cask "$pkg" >/dev/null 2>&1; then
+      continue
+    fi
+    if ! brew install --quiet "$pkg"; then
+      if ! brew install --quiet --cask "$pkg"; then
+        warn "brew: $pkg failed to install; continuing."
+      fi
+    fi
+  done
+}
+
 install_system_packages() {
   sudo_preflight
-  if command -v apt-get >/dev/null 2>&1; then
+  if [ "$PLATFORM" = "Darwin" ] && command -v brew >/dev/null 2>&1; then
+    brew_install_group "core packages" "${BREW_CORE[@]}"
+    if [ "$WITH_OFFICE" -eq 1 ]; then
+      brew_install_group "office packages" "${BREW_OFFICE[@]}"
+      if [ -x "/Applications/LibreOffice.app/Contents/MacOS/soffice" ]; then
+        if ! [ -e /usr/local/bin/soffice ]; then
+          as_root ln -sf "/Applications/LibreOffice.app/Contents/MacOS/soffice" /usr/local/bin/soffice 2>/dev/null || \
+            warn "Could not link soffice into /usr/local/bin; the Office plugin also checks the app bundle."
+        fi
+      fi
+    fi
+    if [ "$WITH_ARCHIVES" -eq 1 ]; then
+      brew_install_group "archive packages" "${BREW_ARCHIVES[@]}"
+    fi
+    if [ "$WITH_DESKTOP" -eq 1 ]; then
+      warn "The Desktop plugin needs Xpra + XFCE (Linux/X11). On macOS it stays unavailable."
+    fi
+  elif command -v apt-get >/dev/null 2>&1; then
     as_root apt-get update -y
 
     mapfile -t core < <(apt_known "${APT_CORE[@]}")
@@ -361,6 +405,12 @@ if [ -z "$AUTH_LOGIN" ] && [ "$HOST" != "127.0.0.1" ] && [ "$HOST" != "localhost
 fi
 
 # ----------------------------------------------------------------- systemd --
+if [ "$WITH_SYSTEMD" -eq 1 ]; then
+  if [ "$PLATFORM" != "Linux" ]; then
+    warn "--systemd is Linux-only; skipping the service installation."
+    WITH_SYSTEMD=0
+  fi
+fi
 if [ "$WITH_SYSTEMD" -eq 1 ]; then
   unit_dir="$HOME/.config/systemd/user"
   mkdir -p "$unit_dir"

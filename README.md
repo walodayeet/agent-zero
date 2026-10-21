@@ -109,9 +109,21 @@ bash install-baremetal.sh                       # core install on :5000
 bash install-baremetal.sh --with-office --with-desktop
 sudo bash install-baremetal.sh --packages-only --with-office --with-desktop
 bash install-baremetal.sh --host 0.0.0.0 --port 5080 --auth-login admin --auth-password '...'
-bash install-baremetal.sh --systemd             # systemd --user service
+bash install-baremetal.sh --systemd             # systemd --user service (Linux)
 ./run-baremetal.sh                              # start manually
+
+# Windows (elevated shell for system packages and junctions)
+# powershell -ExecutionPolicy Bypass -File .\install-baremetal.ps1 -WithOffice
+# powershell -ExecutionPolicy Bypass -File .\run-baremetal.ps1
 ```
+
+Platform support:
+
+| Platform | Installer | Notes |
+|---|---|---|
+| Linux (Debian/Ubuntu, Arch/CachyOS) | `install-baremetal.sh` | apt or pacman, optional systemd user service |
+| macOS | `install-baremetal.sh` | Homebrew packages; `--systemd` is skipped; Desktop plugin needs Linux/Xpra |
+| Windows 10/11 | `install-baremetal.ps1` + `run-baremetal.ps1` | winget packages; `C:\a0`, `C:\exe`, `C:\opt\venv*` junctions when elevated; Desktop plugin unavailable |
 
 What the installer does:
 

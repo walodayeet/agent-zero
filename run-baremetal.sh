@@ -45,6 +45,9 @@ if [ -z "${ALLOWED_ORIGINS:-}" ]; then
     0.0.0.0|::|"[::]")
       host_name="$(hostname -f 2>/dev/null || hostname)"
       host_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+      if [ -z "$host_ip" ] && command -v ipconfig >/dev/null 2>&1; then
+        host_ip="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
+      fi
       [ -n "$host_name" ] && origins="$origins,http://${host_name}:${A0_PORT}"
       [ -n "$host_ip" ] && origins="$origins,http://${host_ip}:${A0_PORT}"
       ;;

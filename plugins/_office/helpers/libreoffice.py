@@ -10,6 +10,12 @@ from typing import Any
 
 
 SOFFICE_BINARIES = ("soffice", "libreoffice")
+SOFFICE_FALLBACK_PATHS = (
+    "/Applications/LibreOffice.app/Contents/MacOS/soffice",
+    "/usr/local/bin/soffice",
+    "C:/Program Files/LibreOffice/program/soffice.exe",
+    "C:/Program Files (x86)/LibreOffice/program/soffice.exe",
+)
 CONVERT_TIMEOUT_SECONDS = 45
 ODF_MIMETYPES = {
     "odt": "application/vnd.oasis.opendocument.text",
@@ -23,6 +29,13 @@ def find_soffice() -> str:
         path = shutil.which(name)
         if path:
             return path
+    program_files = os.environ.get("PROGRAMFILES", "")
+    extra = list(SOFFICE_FALLBACK_PATHS)
+    if program_files:
+        extra.append(os.path.join(program_files, "LibreOffice", "program", "soffice.exe"))
+    for candidate in extra:
+        if candidate and os.path.isfile(candidate):
+            return candidate
     return ""
 
 
