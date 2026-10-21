@@ -90,6 +90,8 @@ def normalize_local_url(url: str) -> str:
     """
     if not url or not is_local_runtime():
         return url
+    if str(dotenv.get_dotenv_value("A0_KEEP_LOCALHOST", "")).lower().strip() in ("1", "true", "yes", "on"):
+        return url
     try:
         parsed = urlsplit(str(url))
     except Exception:

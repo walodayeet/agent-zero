@@ -29,10 +29,12 @@ case ",${NO_PROXY:-},${no_proxy:-}," in
 esac
 
 auth=()
-[ -n "$KEY" ] && auth=(-H "Authorization: Bearer $KEY")
+if [ -n "$KEY" ]; then
+  auth=(-H "Authorization: Bearer $KEY")
+fi
 
 say "GET  $BASE/models"
-body="$(curl -sS -m 10 "${auth[@]}" "$BASE/models" -w '\n%{http_code}' 2>&1)" || true
+body="$(curl -sS -m 10 --noproxy '*' "${auth[@]+"${auth[@]}"}" "$BASE/models" -w '\n%{http_code}' 2>&1)" || true
 code="$(printf '%s' "$body" | tail -n1)"
 payload="$(printf '%s' "$body" | sed '$d')"
 if [ "$code" = "200" ]; then
@@ -55,7 +57,7 @@ fi
 if [ -n "$MODEL" ]; then
   say "POST $BASE/chat/completions (model=$MODEL)"
   req="{\"model\":\"$MODEL\",\"messages\":[{\"role\":\"user\",\"content\":\"ping\"}],\"max_tokens\":8}"
-  resp="$(curl -sS -m 30 "${auth[@]}" -H 'Content-Type: application/json' -d "$req" \
+  resp="$(curl -sS -m 30 --noproxy '*' "${auth[@]+"${auth[@]}"}" -H 'Content-Type: application/json' -d "$req" \
     "$BASE/chat/completions" -w '\n%{http_code}' 2>&1)" || true
   rcode="$(printf '%s' "$resp" | tail -n1)"
   rbody="$(printf '%s' "$resp" | sed '$d')"

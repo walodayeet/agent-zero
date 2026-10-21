@@ -69,7 +69,15 @@ environmental (Docker socket, credentials, external services, root installers).
 - `runtime.normalize_local_url()` rewrites `localhost` → `127.0.0.1` for model
   `api_base` values in bare-metal mode (IPv4-only local gateways). Docker mode is
   unchanged. `run-baremetal.sh`/`.ps1` append loopback hosts to `NO_PROXY`.
-- Diagnose gateways with `scripts/check-local-gateway.sh URL KEY [MODEL]`.
+- Diagnose gateways with `scripts/check-local-gateway.sh URL KEY [MODEL]`
+  (uses `curl --noproxy '*'`, so it tests the gateway, not the proxy).
+- `A0_KEEP_LOCALHOST=1` disables the localhost→127.0.0.1 rewrite for IPv6-only
+  gateways.
+- Docker default in this fork: `scripts/run-docker.sh` / `docker-compose.host.yml`
+  use `--network host`, mount the checkout at `/a0`, honor `A0_WEB_UI_PORT` /
+  `A0_WEB_UI_HOST`, and omit container sshd/SearXNG (host ports collide). Launcher
+  and A0 Install containers keep their own bridged networks — use
+  `host.docker.internal` there.
 - Docker-mode reminder: inside the container `localhost` is the container; use
   `host.docker.internal` (Linux: `--add-host=host.docker.internal:host-gateway`)
   or `--network host`.
