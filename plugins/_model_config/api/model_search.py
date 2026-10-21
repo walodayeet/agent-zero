@@ -127,8 +127,18 @@ class ModelSearch(ApiHandler):
         combined: list[str] = []
         errors: list[str] = []
 
+        trust_env = True
         try:
-            async with httpx.AsyncClient(timeout=10.0) as client:
+            from urllib.parse import urlsplit
+
+            host = (urlsplit(url).hostname or "").lower()
+            if host in {"localhost", "127.0.0.1", "::1"}:
+                trust_env = False
+        except Exception:
+            pass
+
+        try:
+            async with httpx.AsyncClient(timeout=10.0, trust_env=trust_env) as client:
                 for candidate_url, candidate_fmt in urls:
                     resp = await client.get(candidate_url, headers=headers, params=params)
                     if resp.status_code == 200:
@@ -148,10 +158,16 @@ class ModelSearch(ApiHandler):
         endpoint = str(ml.get("endpoint_url", "") or "")
         default_base = str(ml.get("default_base", "") or "")
 
-        if endpoint.startswith("http://") or endpoint.startswith("https://"):
-            return endpoint, fmt
-
         base = str(api_base or default_base or "").strip()
+
+        if endpoint.startswith("http://") or endpoint.startswith("https://"):
+            if not base:
+                return endpoint, fmt
+            # Metadata ships an absolute endpoint (e.g. api.openai.com/v1/models).
+            # With a custom base, keep only its path so the request goes to that base.
+            from urllib.parse import urlsplit
+
+            endpoint = urlsplit(endpoint).path or "/models"
         if not base:
             return None, fmt
 

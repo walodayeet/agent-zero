@@ -55,7 +55,10 @@
                  this.results = r.models;
                  this.source = r.source;
                  this.open = true;
-                 if (r.error) globalThis.toastFrontendError?.('Could not load models from the provider. Check its connection and endpoint settings.', 'Model search');
+                 if (r.error) {
+                   const detail = String(r.error || '').slice(0, 400);
+                   globalThis.toastFrontendError?.(`Could not load models from the provider. Check its connection and endpoint settings.\n${detail}`, 'Model search');
+                 }
                }).finally(() => this.searching = false);
              },
              openSearch(trigger) { trigger?.scrollIntoView({ block: 'center' }); this.doSearch(); },

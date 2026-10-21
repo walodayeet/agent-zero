@@ -69,6 +69,8 @@ environmental (Docker socket, credentials, external services, root installers).
 - `runtime.normalize_local_url()` rewrites `localhost` → `127.0.0.1` for model
   `api_base` values in bare-metal mode (IPv4-only local gateways). Docker mode is
   unchanged. `run-baremetal.sh`/`.ps1` append loopback hosts to `NO_PROXY`.
+- Model search honors a custom `api_base` for providers whose metadata ships an
+  absolute endpoint (e.g. OpenAI) and bypasses proxy env for loopback hosts.
 - Diagnose gateways with `scripts/check-local-gateway.sh URL KEY [MODEL]`
   (uses `curl --noproxy '*'`, so it tests the gateway, not the proxy).
 - `A0_KEEP_LOCALHOST=1` disables the localhost→127.0.0.1 rewrite for IPv6-only
