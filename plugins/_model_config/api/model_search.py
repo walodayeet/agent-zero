@@ -4,6 +4,7 @@ from typing import Any
 
 import httpx
 from helpers.api import ApiHandler, Request, Response
+from helpers import runtime
 from helpers.providers import get_provider_config
 import models
 
@@ -94,7 +95,10 @@ class ModelSearch(ApiHandler):
     ) -> tuple[list[str], str, str]:
         api_key = models.get_api_key(provider)
         kwargs = (cfg or {}).get("kwargs", {}) or {}
-        api_base = user_api_base or kwargs.get("api_base", "") or ml.get("default_base", "")
+        user_api_base = runtime.normalize_local_url(user_api_base)
+        api_base = runtime.normalize_local_url(
+            user_api_base or kwargs.get("api_base", "") or ml.get("default_base", "")
+        )
         effective_ml = dict(ml or {})
 
         # Ollama's native endpoint is /api/tags, but user-supplied /v1 bases usually
