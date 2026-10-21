@@ -3,7 +3,8 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
-export A0_LOCAL_RUNTIME=true
+# Bare metal is auto-detected (non-dockerized, no RFC_PASSWORD); keep this explicit for clarity.
+export A0_LOCAL_RUNTIME=${A0_LOCAL_RUNTIME:-true}
 export PATH="$PWD/.venv/bin:$PATH"
 export PLAYWRIGHT_BROWSERS_PATH="$PWD/tmp/playwright"
 export A0_PORT="${A0_PORT:-5000}"
