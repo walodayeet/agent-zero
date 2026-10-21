@@ -34,6 +34,33 @@ if (-not (Test-Path $python)) {
     exit 1
 }
 
+# Data directory: env > saved .a0-data > ~/agent-zero/<instance>/usr (launcher layout).
+$dataConf = Join-Path $PSScriptRoot ".a0-data"
+if (-not $env:A0_DATA_DIR -and (Test-Path $dataConf)) {
+    $saved = (Get-Content $dataConf -TotalCount 1 -ErrorAction SilentlyContinue)
+    if ($saved) { $saved = $saved.Trim() }
+    if ($saved -and $saved -ne "local") { $env:A0_DATA_DIR = $saved }
+}
+if (-not $env:A0_DATA_DIR -and -not (Test-Path $dataConf)) {
+    $usrPath = Join-Path $PSScriptRoot "usr"
+    $hasData = $false
+    if (Test-Path $usrPath) {
+        $hasData = [bool](Get-ChildItem -LiteralPath $usrPath -Recurse -File -Force -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -ne ".gitkeep" } | Select-Object -First 1)
+    }
+    $instance = if ($env:A0_INSTANCE) { $env:A0_INSTANCE } else { "agent-zero" }
+    $fallback = Join-Path $env:USERPROFILE "agent-zero\$instance\usr"
+    if (-not $hasData) {
+        $answer = ""
+        if ($Host.Name -eq "Console" -and -not $env:A0_NO_ONBOARDING) {
+            $answer = Read-Host "Agent Zero data directory [$fallback] (enter 'local' to keep $usrPath)"
+        }
+        if (-not $answer) { $env:A0_DATA_DIR = $fallback }
+        elseif ($answer -notin @("local", "./usr", "usr")) { $env:A0_DATA_DIR = $answer }
+        if ($env:A0_DATA_DIR) { Set-Content -Path $dataConf -Value $env:A0_DATA_DIR } else { Set-Content -Path $dataConf -Value "local" }
+    }
+}
+
 # Optional external data directory via an NTFS junction.
 if ($env:A0_DATA_DIR) {
     $usr = Join-Path $PSScriptRoot "usr"

@@ -21,6 +21,7 @@ cd "$REPO_DIR"
 HOST="127.0.0.1"
 PORT="5000"
 DATA_DIR=""
+INSTANCE="${A0_INSTANCE:-agent-zero}"
 INSTALL_PACKAGES=1
 WITH_OFFICE=0
 WITH_DESKTOP=0
@@ -30,6 +31,7 @@ WITH_SYSTEMD=0
 AUTH_LOGIN=""
 AUTH_PASSWORD=""
 PACKAGES_ONLY=0
+NONINTERACTIVE=0
 COMPAT_LINKS=1
 COMPAT_ONLY=0
 PYTHON_SPEC="3.12"
@@ -51,7 +53,9 @@ Options:
   --port PORT            Web UI port (default 5000).
   --auth-login USER      Enable Web UI basic auth (needed for remote access).
   --auth-password PASS   Password for --auth-login.
-  --data-dir PATH        User data directory (default <repo>/usr).
+  --data-dir PATH        User data directory (default ~/agent-zero/<instance>/usr).
+  --instance NAME        Instance name for the default path (default agent-zero).
+  --non-interactive      Never prompt; use defaults/flags only.
   --with-office          Install LibreOffice for the Office plugin.
   --with-desktop         Install Xpra + XFCE for the Desktop plugin.
   --no-archives          Skip 7z support for rar/7z/gz archives.
@@ -74,6 +78,9 @@ while [ $# -gt 0 ]; do
     --port=*) PORT="${1#*=}"; shift ;;
     --data-dir) DATA_DIR="${2:?--data-dir needs a value}"; shift 2 ;;
     --data-dir=*) DATA_DIR="${1#*=}"; shift ;;
+    --instance) INSTANCE="${2:?--instance needs a value}"; shift 2 ;;
+    --instance=*) INSTANCE="${1#*=}"; shift ;;
+    --non-interactive|-y) NONINTERACTIVE=1; shift ;;
     --auth-login) AUTH_LOGIN="${2:?--auth-login needs a value}"; shift 2 ;;
     --auth-login=*) AUTH_LOGIN="${1#*=}"; shift ;;
     --auth-password) AUTH_PASSWORD="${2:?--auth-password needs a value}"; shift 2 ;;
@@ -361,7 +368,48 @@ seed_usr() {
   chmod go-w "$root" "$root"/* 2>/dev/null || true
 }
 
+default_data_dir() {
+  # Same layout the A0 Launcher / A0 Install use: ~/agent-zero/<instance>/usr
+  printf '%s' "$HOME/agent-zero/${INSTANCE:-agent-zero}/usr"
+}
+
+usr_has_data() {
+  [ -d usr ] || return 1
+  [ -n "$(find usr -mindepth 1 -type f ! -name '.gitkeep' -print -quit 2>/dev/null)" ]
+}
+
+DATA_CONF="$REPO_DIR/.a0-data"
+if [ -z "$DATA_DIR" ] && [ -f "$DATA_CONF" ]; then
+  saved="$(sed -n '1p' "$DATA_CONF" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  case "$saved" in ""|local) : ;; *) DATA_DIR="$saved" ;; esac
+fi
+if [ -z "$DATA_DIR" ] && [ "$NONINTERACTIVE" -eq 0 ] && [ -t 0 ]; then
+  fallback="$(default_data_dir)"
+  if usr_has_data; then
+    printf 'Existing data in %s. Data directory [keep local] (enter a path to migrate): ' "$REPO_DIR/usr"
+    read -r answer || answer=""
+    case "$answer" in ""|local|./usr|usr) : ;; *) DATA_DIR="$answer" ;; esac
+  else
+    printf 'Agent Zero data directory [%s] (enter "local" to keep %s): ' "$fallback" "$REPO_DIR/usr"
+    read -r answer || answer=""
+    case "$answer" in
+      "") DATA_DIR="$fallback" ;;
+      local|./usr|usr) DATA_DIR="" ;;
+      *) DATA_DIR="$answer" ;;
+    esac
+  fi
+  if [ -n "$DATA_DIR" ]; then
+    printf '%s\n' "$DATA_DIR" > "$DATA_CONF"
+  else
+    printf 'local\n' > "$DATA_CONF"
+  fi
+elif [ -z "$DATA_DIR" ] && { [ "$NONINTERACTIVE" -eq 1 ] || [ ! -t 0 ]; } && ! usr_has_data; then
+  DATA_DIR="$(default_data_dir)"
+  printf '%s\n' "$DATA_DIR" > "$DATA_CONF"
+fi
+
 if [ -n "$DATA_DIR" ]; then
+  case "$DATA_DIR" in "~/"*) DATA_DIR="$HOME/${DATA_DIR#\~/}" ;; esac
   mkdir -p "$DATA_DIR"
   if [ -e usr ] && [ ! -L usr ]; then
     # move the checkout's data (skeleton or real) into the requested location;
@@ -465,6 +513,7 @@ ok "Agent Zero bare metal is installed."
 cat <<EOF
 
   Start:        $REPO_DIR/run-baremetal.sh
+  Data:         ${DATA_DIR:-$REPO_DIR/usr}
   Web UI:       $display_url
   First run:    the UI downloads model presets and the embedding model
 

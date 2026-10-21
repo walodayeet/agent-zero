@@ -131,7 +131,11 @@ What the installer does:
 - installs Patchright Chromium (plus browser system libraries);
 - installs host packages (ffmpeg, tesseract, ripgrep, jq, node/npm, LibreOffice,
   Xpra/XFCE, 7z) depending on the selected flags;
-- seeds `usr/` (or `--data-dir`) so the first start cannot race plugin discovery;
+- asks once where user data should live (default `~/agent-zero/<instance>/usr`,
+  the same layout A0 Launcher/A0 Install use; `local` keeps `<repo>/usr`);
+  the choice is saved in `.a0-data`, `--data-dir` overrides it, and
+  `--non-interactive` uses the default without prompting;
+- seeds the data directory so the first start cannot race plugin discovery;
 - adds container-path compatibility links used by catalog plugins:
   `/a0` → checkout, `/exe` → `docker/run/fs/exe`, `/opt/venv-a0` and
   `/opt/venv` → `.venv`, plus `host.docker.internal` in `/etc/hosts`;

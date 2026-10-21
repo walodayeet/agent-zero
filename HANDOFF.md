@@ -24,6 +24,14 @@ Paste this file to the next agent maintaining this host/checkout.
   `powershell.exe` + pywinpty on Windows; `find_soffice` checks app-bundle and
   Program Files paths.
 
+## Data directory
+Default: `~/agent-zero/<instance>/usr` (matches A0 Launcher/A0 Install:
+`~/agent-zero/<name>/usr`, default instance `agent-zero`). The installer and the
+launcher ask once on first run (enter `local` to keep `<repo>/usr`); the answer is
+stored in `.a0-data`. Overrides: `--data-dir PATH` / `-DataDir`, `A0_DATA_DIR`,
+`A0_INSTANCE`, `--non-interactive`, `A0_NO_ONBOARDING=1`. Repo `usr` becomes a
+symlink to the chosen directory; migration is installer-only and copy-verified.
+
 ## Starting and installing
 ```bash
 ./run-baremetal.sh                       # manual start (A0_HOST/A0_PORT/A0_DATA_DIR/SEARXNG_URL)

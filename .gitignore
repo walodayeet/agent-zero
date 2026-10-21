@@ -48,3 +48,6 @@ agent_history.gif
 .agent/**
 .claude/**
 .playwright-cli/
+
+# Native install data-directory choice
+.a0-data

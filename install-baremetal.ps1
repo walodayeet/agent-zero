@@ -3,6 +3,7 @@
 #   powershell -ExecutionPolicy Bypass -File .\install-baremetal.ps1
 #   powershell -ExecutionPolicy Bypass -File .\install-baremetal.ps1 -WithOffice
 #   powershell -ExecutionPolicy Bypass -File .\install-baremetal.ps1 -HostAddr 0.0.0.0 -Port 5080 -AuthLogin admin -AuthPassword "***"
+#   powershell -ExecutionPolicy Bypass -File .\install-baremetal.ps1 -Instance my-a0 -DataDir D:\a0-data
 #
 # Docker, A0 Launcher image flows and the A0 Install CLI stay unchanged; this is
 # an additional host runtime. A bare-metal instance can be added to A0 Launcher
@@ -13,6 +14,8 @@ param(
     [string]$HostAddr = "127.0.0.1",
     [int]$Port = 5000,
     [string]$DataDir = "",
+    [string]$Instance = $(if ($env:A0_INSTANCE) { $env:A0_INSTANCE } else { "agent-zero" }),
+    [switch]$NonInteractive,
     [string]$AuthLogin = "",
     [string]$AuthPassword = "",
     [switch]$WithOffice,
@@ -138,6 +141,30 @@ if ($LASTEXITCODE -ne 0) { Write-Warn "Chromium download failed; it retries on f
 
 # -------------------------------------------------------------------- data ----
 $usr = Join-Path $repo "usr"
+$dataConf = Join-Path $repo ".a0-data"
+if (-not $DataDir -and (Test-Path $dataConf)) {
+    $saved = (Get-Content $dataConf -TotalCount 1 -ErrorAction SilentlyContinue)
+    if ($saved) { $saved = $saved.Trim() }
+    if ($saved -and $saved -ne "local") { $DataDir = $saved }
+}
+function Test-UsrData([string]$path) {
+    if (-not (Test-Path $path)) { return $false }
+    return [bool](Get-ChildItem -LiteralPath $path -Recurse -File -Force -ErrorAction SilentlyContinue |
+        Where-Object { $_.Name -ne ".gitkeep" } | Select-Object -First 1)
+}
+if (-not $DataDir -and -not (Test-UsrData $usr)) {
+    $fallback = Join-Path $env:USERPROFILE "agent-zero\$Instance\usr"
+    if (-not $NonInteractive -and $Host.Name -eq "Console") {
+        $answer = Read-Host "Agent Zero data directory [$fallback] (enter 'local' to keep $usr)"
+        if (-not $answer) { $DataDir = $fallback }
+        elseif ($answer -in @("local", "./usr", "usr")) { $DataDir = "" }
+        else { $DataDir = $answer }
+    } else {
+        $DataDir = $fallback
+    }
+    if ($DataDir) { Set-Content -Path $dataConf -Value $DataDir } else { Set-Content -Path $dataConf -Value "local" }
+}
+
 if ($DataDir) {
     New-Item -ItemType Directory -Force -Path $DataDir | Out-Null
     if (Test-Path $usr) {

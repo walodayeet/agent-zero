@@ -4,7 +4,9 @@
 # Works for direct CLI use and as the systemd ExecStart target. Environment:
 #   A0_HOST       bind address (default 127.0.0.1; use 0.0.0.0 for LAN/remote access)
 #   A0_PORT       web UI port (default 5000)
-#   A0_DATA_DIR   user data directory (default <repo>/usr)
+#   A0_DATA_DIR   user data directory (default ~/agent-zero/<instance>/usr)
+#   A0_INSTANCE   instance name for the default path (default agent-zero)
+#   A0_NO_ONBOARDING=1  skip the first-run data-directory prompt
 #   SEARXNG_URL   SearXNG JSON endpoint (default http://127.0.0.1:8888/search when present)
 #   ALLOWED_ORIGINS  extra CORS origins, appended to the derived local/host origins
 set -euo pipefail
@@ -18,24 +20,71 @@ export A0_PORT="${A0_PORT:-5000}"
 export A0_HOST="${A0_HOST:-127.0.0.1}"
 
 seed_usr() {
-  mkdir -p usr/agents usr/plugins usr/skills usr/knowledge usr/workdir \
-    usr/uploads usr/chats usr/scheduler usr/memory usr/projects
+  mkdir -p "$1/agents" "$1/plugins" "$1/skills" "$1/knowledge" "$1/workdir" \
+    "$1/uploads" "$1/chats" "$1/scheduler" "$1/memory" "$1/projects"
 }
 
-if [ -n "${A0_DATA_DIR:-}" ]; then
-  mkdir -p "$A0_DATA_DIR"
-  if [ -L usr ]; then
-    ln -sfn "$A0_DATA_DIR" usr
-  elif [ -d usr ] && [ -n "$(ls -A usr 2>/dev/null)" ]; then
-    # Never move live data at runtime; the installer handles one-time migration.
-    echo "A0_DATA_DIR ignored: $PWD/usr already contains data." >&2
-    echo "Use 'bash install-baremetal.sh --data-dir $A0_DATA_DIR' to migrate." >&2
+default_data_dir() {
+  # Same layout the A0 Launcher / A0 Install use: ~/agent-zero/<instance>/usr
+  printf '%s' "$HOME/agent-zero/${A0_INSTANCE:-agent-zero}/usr"
+}
+
+# True when usr/ holds real user data (not just the tracked skeleton).
+usr_has_data() {
+  [ -d usr ] || return 1
+  [ -n "$(find usr -mindepth 1 -type f ! -name '.gitkeep' -print -quit 2>/dev/null)" ]
+}
+
+DATA_CONF="$PWD/.a0-data"
+DATA_DIR_RESOLVED="${A0_DATA_DIR:-}"
+if [ -z "$DATA_DIR_RESOLVED" ]; then
+  if usr_has_data; then
+    : # existing project-local data wins; migration is the installer's job
+  elif [ -f "$DATA_CONF" ]; then
+    saved="$(sed -n '1p' "$DATA_CONF" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+    case "$saved" in
+      ""|local) : ;;
+      *) DATA_DIR_RESOLVED="$saved" ;;
+    esac
   else
-    [ -d usr ] && rmdir usr
-    ln -sfn "$A0_DATA_DIR" usr
+    fallback="$(default_data_dir)"
+    if [ -t 0 ] && [ -t 1 ] && [ "${A0_NO_ONBOARDING:-0}" != "1" ]; then
+      printf 'Agent Zero data directory [%s] (enter "local" to keep %s): ' "$fallback" "$PWD/usr"
+      read -r answer || answer=""
+      case "$answer" in
+        "") DATA_DIR_RESOLVED="$fallback" ;;
+        local|./usr|usr) DATA_DIR_RESOLVED="" ;;
+        *) DATA_DIR_RESOLVED="$answer" ;;
+      esac
+    else
+      DATA_DIR_RESOLVED="$fallback"
+    fi
+    if [ -n "$DATA_DIR_RESOLVED" ]; then
+      printf '%s\n' "$DATA_DIR_RESOLVED" > "$DATA_CONF"
+    else
+      printf 'local\n' > "$DATA_CONF"
+    fi
   fi
 fi
-seed_usr
+
+if [ -n "$DATA_DIR_RESOLVED" ]; then
+  mkdir -p "$DATA_DIR_RESOLVED"
+  if [ -L usr ]; then
+    ln -sfn "$DATA_DIR_RESOLVED" usr
+  elif usr_has_data; then
+    echo "Data directory ignored: $PWD/usr already contains data." >&2
+    echo "Use 'bash install-baremetal.sh --data-dir $DATA_DIR_RESOLVED' to migrate it." >&2
+  else
+    [ -d usr ] && rm -rf usr
+    ln -sfn "$DATA_DIR_RESOLVED" usr
+  fi
+  export A0_DATA_DIR="$DATA_DIR_RESOLVED"
+fi
+if [ -L usr ]; then
+  seed_usr "$(readlink usr)"
+else
+  seed_usr usr
+fi
 
 # Login is disabled unless AUTH_LOGIN/AUTH_PASSWORD are set, so the browser origin
 # must be allowlisted or every API call answers 403 "Origin None not allowed".
