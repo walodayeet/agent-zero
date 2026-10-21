@@ -58,6 +58,18 @@ if [ -z "${ALLOWED_ORIGINS:-}" ]; then
   export ALLOWED_ORIGINS="$origins"
 fi
 
+# Local gateways (cliproxyapi, SearXNG, Ollama, …) must bypass any proxy.
+loopback_no_proxy="localhost,127.0.0.1,::1,host.docker.internal"
+if [ -n "${NO_PROXY:-}" ]; then
+  case ",$NO_PROXY," in
+    *",127.0.0.1,"*) ;;
+    *) export NO_PROXY="$NO_PROXY,$loopback_no_proxy" ;;
+  esac
+else
+  export NO_PROXY="$loopback_no_proxy"
+fi
+export no_proxy="$NO_PROXY"
+
 if [ -z "${SEARXNG_URL:-}" ]; then
   if curl -fsS -m 2 -o /dev/null -X POST http://127.0.0.1:8888/search -d 'q=ping&format=json' 2>/dev/null; then
     export SEARXNG_URL="http://127.0.0.1:8888/search"

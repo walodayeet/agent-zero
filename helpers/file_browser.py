@@ -343,8 +343,15 @@ class FileBrowser:
             with os.scandir(full_path) as iterator:
                 for entry in iterator:
                     try:
-                        stat_info = entry.stat(follow_symlinks=True)
                         entry_path = full_path / entry.name
+                        broken_link = False
+                        try:
+                            stat_info = entry.stat(follow_symlinks=True)
+                        except FileNotFoundError:
+                            if not entry.is_symlink():
+                                raise
+                            stat_info = entry.stat(follow_symlinks=False)
+                            broken_link = True
                         entry_data: Dict[str, Any] = {
                             "name": entry.name,
                             "path": (
@@ -364,6 +371,15 @@ class FileBrowser:
                                 entry_data["symlink_target"] = os.readlink(entry.path)
                             except OSError:
                                 pass
+                        if broken_link:
+                            entry_data.update({
+                                "type": "unknown",
+                                "size": 0,
+                                "is_dir": False,
+                                "broken": True,
+                            })
+                            files.append(entry_data)
+                            continue
 
                         if entry.is_file(follow_symlinks=True):
                             entry_data.update({

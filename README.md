@@ -150,6 +150,13 @@ Compatibility:
   external services, credentials, or root package installs still need those.
 - **Self-update** stays disabled outside Docker (`supported: false`); update with
   `git pull` and reinstall dependencies.
+- **Local gateways (cliproxyapi, Ollama, LM Studio):** bare metal talks to them
+  over normal host sockets. Use `http://127.0.0.1:PORT/v1` (`localhost` is
+  normalized to IPv4 loopback) and put the key in the provider key. Probe it with
+  `./scripts/check-local-gateway.sh http://127.0.0.1:8317/v1 KEY [MODEL]`.
+  In Docker mode `localhost` means the container: use
+  `host.docker.internal` (add `--add-host=host.docker.internal:host-gateway` on
+  Linux) or `--network host`. Launchers add loopback hosts to `NO_PROXY`.
 
 On Arch/CachyOS the installer only installs missing packages with
 `pacman -S --needed --noconfirm` (no `-Syu`); run a system upgrade yourself when

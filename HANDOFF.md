@@ -61,6 +61,19 @@ requirements: pip in the venv (uv venvs lack it), container-path shims,
 novnc ffmpeg tesseract libreoffice xpra …`). Remaining per-plugin needs are
 environmental (Docker socket, credentials, external services, root installers).
 
+## Networking
+- Bare metal has no Docker network layer: model/browser/search calls are direct
+  host sockets. Only `runtime.get_local_url()` mentions `host.docker.internal`
+  (dockerized mode); the compatibility `/etc/hosts` entry maps that name to
+  127.0.0.1 so plugin defaults work on the host too.
+- `runtime.normalize_local_url()` rewrites `localhost` → `127.0.0.1` for model
+  `api_base` values in bare-metal mode (IPv4-only local gateways). Docker mode is
+  unchanged. `run-baremetal.sh`/`.ps1` append loopback hosts to `NO_PROXY`.
+- Diagnose gateways with `scripts/check-local-gateway.sh URL KEY [MODEL]`.
+- Docker-mode reminder: inside the container `localhost` is the container; use
+  `host.docker.internal` (Linux: `--add-host=host.docker.internal:host-gateway`)
+  or `--network host`.
+
 ## Verification checklist after any change
 - `curl -s localhost:5000/api/health` → 200.
 - Chat prompt runs `echo` via terminal; cwd is `<checkout>/usr/workdir`.

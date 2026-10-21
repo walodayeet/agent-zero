@@ -1,4 +1,5 @@
 import argparse
+from urllib.parse import urlsplit, urlunsplit
 import inspect
 import secrets
 from pathlib import Path
@@ -78,6 +79,25 @@ def is_local_runtime() -> bool:
     if explicit:
         return explicit in ("true", "1", "yes", "on")
     return not is_dockerized() and not dotenv.get_dotenv_value(dotenv.KEY_RFC_PASSWORD, "")
+
+
+def normalize_local_url(url: str) -> str:
+    """Prefer IPv4 loopback for local gateways on bare metal.
+
+    Container images and local LLM gateways commonly bind 127.0.0.1 only, while
+    `localhost` may resolve to ::1 first and be refused. Explicit IPv6 literals
+    are left untouched; Dockerized mode is unchanged.
+    """
+    if not url or not is_local_runtime():
+        return url
+    try:
+        parsed = urlsplit(str(url))
+    except Exception:
+        return url
+    if parsed.hostname != "localhost":
+        return url
+    netloc = "127.0.0.1" + (f":{parsed.port}" if parsed.port else "")
+    return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
 
 
 def get_local_url():

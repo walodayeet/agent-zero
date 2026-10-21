@@ -11,6 +11,15 @@ $env:A0_LOCAL_RUNTIME = if ($env:A0_LOCAL_RUNTIME) { $env:A0_LOCAL_RUNTIME } els
 $env:PATH = "$PSScriptRoot\.venv\Scripts;$env:PATH"
 $env:PLAYWRIGHT_BROWSERS_PATH = if ($env:PLAYWRIGHT_BROWSERS_PATH) { $env:PLAYWRIGHT_BROWSERS_PATH } else { "$PSScriptRoot\tmp\playwright" }
 
+# Local gateways must bypass any proxy.
+$loopbackNoProxy = "localhost,127.0.0.1,::1,host.docker.internal"
+if ($env:NO_PROXY) {
+    if ($env:NO_PROXY -notmatch "127\.0\.0\.1") { $env:NO_PROXY = "$env:NO_PROXY,$loopbackNoProxy" }
+} else {
+    $env:NO_PROXY = $loopbackNoProxy
+}
+$env:no_proxy = $env:NO_PROXY
+
 $python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path $python)) {
     Write-Error "Missing .venv. Run: powershell -ExecutionPolicy Bypass -File .\install-baremetal.ps1"

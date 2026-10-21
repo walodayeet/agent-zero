@@ -154,11 +154,15 @@ class ModelConfig:
     kwargs: dict = field(default_factory=dict)
 
     def build_kwargs(self):
+        from helpers import runtime
+
         kwargs = self.kwargs.copy() or {}
         if self.api_key and "api_key" not in kwargs:
             kwargs["api_key"] = self.api_key
+        if "api_base" in kwargs and kwargs["api_base"]:
+            kwargs["api_base"] = runtime.normalize_local_url(str(kwargs["api_base"]))
         if self.api_base and "api_base" not in kwargs:
-            kwargs["api_base"] = self.api_base
+            kwargs["api_base"] = runtime.normalize_local_url(self.api_base)
         return kwargs
 
 
