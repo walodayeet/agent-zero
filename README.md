@@ -96,6 +96,51 @@ Open the Web UI, configure your LLM provider, and start with a concrete task. Fo
 
 </details>
 
+## Bare metal (no Docker)
+
+This fork also runs the Python server directly on the host. Docker, the A0
+Launcher image flow and the A0 Install CLI keep working unchanged; bare metal is
+an additional runtime, not a replacement.
+
+```bash
+git clone https://github.com/walodayeet/agent-zero.git
+cd agent-zero
+bash install-baremetal.sh                       # core install on :5000
+bash install-baremetal.sh --with-office --with-desktop
+sudo bash install-baremetal.sh --packages-only --with-office --with-desktop
+bash install-baremetal.sh --host 0.0.0.0 --port 5080 --auth-login admin --auth-password '...'
+bash install-baremetal.sh --systemd             # systemd --user service
+./run-baremetal.sh                              # start manually
+```
+
+What the installer does:
+
+- creates `.venv` with `requirements.txt`, `ipython`, pip/setuptools/wheel;
+- installs Patchright Chromium (plus browser system libraries);
+- installs host packages (ffmpeg, tesseract, ripgrep, jq, node/npm, LibreOffice,
+  Xpra/XFCE, 7z) depending on the selected flags;
+- seeds `usr/` (or `--data-dir`) so the first start cannot race plugin discovery;
+- adds container-path compatibility links used by catalog plugins:
+  `/a0` → checkout, `/exe` → `docker/run/fs/exe`, `/opt/venv-a0` and
+  `/opt/venv` → `.venv`, plus `host.docker.internal` in `/etc/hosts`;
+- optionally installs the A0 CLI and a systemd user unit.
+
+Compatibility:
+
+- **A0 Launcher:** add the instance as a *remote instance* using its URL. The
+  launcher probes the public `/api/health` endpoint; credentials use
+  `--auth-login/--auth-password`.
+- **A0 CLI:** `a0 headless --host http://127.0.0.1:5000 --new-chat -p "hello"`;
+  the builtin `_a0_connector` plugin serves the same HTTP/WebSocket API.
+- **Catalog plugins:** all manifest-valid plugins from the Plugin Hub load on
+  bare metal (verified with the full catalog). Plugins that expect container
+  paths resolve through the compatibility links; plugins that need Docker,
+  external services, credentials, or root package installs still need those.
+- **Self-update** stays disabled outside Docker (`supported: false`); update with
+  `git pull` and reinstall dependencies.
+
+See `./install-baremetal.sh --help` for every flag.
+
 ## Troubleshooting
 
 - **Docker is not running:** start Docker Desktop or your Docker service, then reopen the Launcher or rerun the install command.

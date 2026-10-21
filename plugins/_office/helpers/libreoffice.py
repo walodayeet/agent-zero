@@ -153,14 +153,23 @@ def _run_soffice(soffice: str, args: list[str], timeout: int) -> subprocess.Comp
     vcl = os.environ.get("A0_OFFICE_VCLPLUGIN", "").strip()
     if vcl:
         env["SAL_USE_VCLPLUGIN"] = vcl
-    return subprocess.run(
-        [soffice, *args],
-        check=False,
-        text=True,
-        capture_output=True,
-        timeout=timeout,
-        env=env,
-    )
+
+    # A shared LibreOffice user profile turns concurrent/overlapping conversions
+    # into silent "delegate to the running instance" exits (0, no output file).
+    # Give every call its own profile so batch conversions are deterministic.
+    profile = tempfile.mkdtemp(prefix="a0-office-profile-")
+    try:
+        profile_uri = Path(profile).as_uri()
+        return subprocess.run(
+            [soffice, *args, f"-env:UserInstallation={profile_uri}"],
+            check=False,
+            text=True,
+            capture_output=True,
+            timeout=timeout,
+            env=env,
+        )
+    finally:
+        shutil.rmtree(profile, ignore_errors=True)
 
 
 def _format_process_error(result: subprocess.CompletedProcess[str]) -> str:

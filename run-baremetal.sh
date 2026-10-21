@@ -17,20 +17,25 @@ export PLAYWRIGHT_BROWSERS_PATH="$PWD/tmp/playwright"
 export A0_PORT="${A0_PORT:-5000}"
 export A0_HOST="${A0_HOST:-127.0.0.1}"
 
+seed_usr() {
+  mkdir -p usr/agents usr/plugins usr/skills usr/knowledge usr/workdir \
+    usr/uploads usr/chats usr/scheduler usr/memory usr/projects
+}
+
 if [ -n "${A0_DATA_DIR:-}" ]; then
   mkdir -p "$A0_DATA_DIR"
   if [ -L usr ]; then
     ln -sfn "$A0_DATA_DIR" usr
-  elif [ -d usr ]; then
-    if [ -z "$(ls -A usr 2>/dev/null)" ]; then
-      rmdir usr && ln -sfn "$A0_DATA_DIR" usr
-    else
-      echo "A0_DATA_DIR ignored: $PWD/usr already contains data" >&2
-    fi
+  elif [ -d usr ] && [ -n "$(ls -A usr 2>/dev/null)" ]; then
+    # Never move live data at runtime; the installer handles one-time migration.
+    echo "A0_DATA_DIR ignored: $PWD/usr already contains data." >&2
+    echo "Use 'bash install-baremetal.sh --data-dir $A0_DATA_DIR' to migrate." >&2
   else
+    [ -d usr ] && rmdir usr
     ln -sfn "$A0_DATA_DIR" usr
   fi
 fi
+seed_usr
 
 # Login is disabled unless AUTH_LOGIN/AUTH_PASSWORD are set, so the browser origin
 # must be allowlisted or every API call answers 403 "Origin None not allowed".
