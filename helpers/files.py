@@ -589,7 +589,7 @@ def get_abs_path_dockerized(*relative_paths):
     abs = get_abs_path(*relative_paths)
     from helpers import runtime
 
-    if runtime.is_dockerized():
+    if runtime.is_dockerized() or runtime.is_local_runtime():
         return abs
     return normalize_a0_path(abs)
 

@@ -64,6 +64,17 @@ def is_development() -> bool:
     return not is_dockerized()
 
 
+def is_local_runtime() -> bool:
+    """Bare-metal mode: run the framework and all execution locally (no RFC/Docker counterpart)."""
+    arg = get_arg("local_runtime")
+    if arg is not None:
+        return str(arg).lower().strip() in ("true", "1", "yes", "on")
+    return (
+        str(dotenv.get_dotenv_value("A0_LOCAL_RUNTIME", "")).lower().strip()
+        in ("true", "1", "yes", "on")
+    )
+
+
 def get_local_url():
     if is_dockerized():
         return "host.docker.internal"
@@ -98,7 +109,7 @@ async def call_development_function(func: Callable[..., T], *args, **kwargs) -> 
 async def call_development_function(
     func: Union[Callable[..., T], Callable[..., Awaitable[T]]], *args, **kwargs
 ) -> T:
-    if is_development():
+    if is_development() and not is_local_runtime():
         url = _get_rfc_url()
         password = _get_rfc_password()
         # Normalize path components to build a valid Python module path across OSes

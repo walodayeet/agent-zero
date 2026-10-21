@@ -1,7 +1,7 @@
 import os
 import uuid
 from typing import TYPE_CHECKING
-from helpers import guids
+from helpers import files, guids
 
 if TYPE_CHECKING:
     from agent import AgentContext
@@ -10,7 +10,7 @@ from helpers.print_style import PrintStyle
 
 QUEUE_KEY = "message_queue"
 QUEUE_SEQ_KEY = "message_queue_seq"
-UPLOAD_FOLDER = "/a0/usr/uploads"
+UPLOAD_FOLDER = files.get_abs_path("usr/uploads")
 
 
 def get_queue(context: "AgentContext") -> list:

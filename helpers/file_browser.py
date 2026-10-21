@@ -81,14 +81,21 @@ class FileBrowser:
         return base64.b64encode(output.getvalue()).decode("ascii")
 
     def __init__(self):
-        # if runtime.is_development():
-        #     base_dir = files.get_base_dir()
-        # else:
-        #     base_dir = "/"
-        base_dir = "/"
-        self.base_dir = Path(base_dir)
+        from helpers import runtime
+
+        # dockerized: browser spans the container filesystem ("/a0" is real)
+        # bare metal: browser is rooted at the install directory, /a0/... maps onto it
+        self.local_root = runtime.is_local_runtime()
+        self.base_dir = Path(files.get_base_dir() if self.local_root else "/")
+
+    def _map(self, path: str) -> str:
+        """Map docker-style /a0/... paths onto the local install root in bare-metal mode."""
+        if self.local_root and isinstance(path, str) and path.startswith("/a0"):
+            return path[len("/a0"):].lstrip("/") or "."
+        return path
 
     def save_file_b64(self, current_path: str, filename: str, base64_content: str):
+        current_path = self._map(current_path)
         try:
             filename = safe_filename(filename)
             if not filename:
@@ -115,6 +122,7 @@ class FileBrowser:
         """Save uploaded files and return successful and failed filenames"""
         successful = []
         failed = []
+        current_path = self._map(current_path)
         from helpers import file_connections
         if file_connections.is_remote(current_path):
             import posixpath
@@ -163,7 +171,7 @@ class FileBrowser:
     def _entry_path(self, file_path: str) -> Path:
         if not file_path or not str(file_path).strip():
             raise ValueError("File path is required")
-        requested = self.base_dir / file_path
+        requested = self.base_dir / self._map(file_path)
         if requested.name in ("", ".", ".."):
             raise ValueError("Choose a file or folder, not the filesystem root")
         entry = requested.parent.resolve() / requested.name
@@ -219,7 +227,7 @@ class FileBrowser:
             raise ValueError("No items selected")
 
         base_dir = self.base_dir.resolve()
-        destination = (self.base_dir / destination_path).resolve()
+        destination = (self.base_dir / self._map(destination_path)).resolve()
         if not destination.is_relative_to(base_dir):
             raise ValueError("Invalid destination path")
         if not destination.is_dir():
@@ -228,7 +236,7 @@ class FileBrowser:
         moves: List[Tuple[Path, Path]] = []
         targets: set[Path] = set()
         for file_path in dict.fromkeys(file_paths):
-            requested = self.base_dir / file_path
+            requested = self.base_dir / self._map(file_path)
             source = requested.parent.resolve() / requested.name
             if not source.is_relative_to(base_dir) or source == base_dir:
                 raise ValueError("Invalid source path")
@@ -277,7 +285,7 @@ class FileBrowser:
             if "/" in folder_name or "\\" in folder_name:
                 raise ValueError("Folder name cannot include path separators")
 
-            parent_full = (self.base_dir / parent_path).resolve()
+            parent_full = (self.base_dir / self._map(parent_path)).resolve()
             if not str(parent_full).startswith(str(self.base_dir)):
                 raise ValueError("Invalid parent path")
 
@@ -299,7 +307,7 @@ class FileBrowser:
                 raise ValueError("Content must be a string")
             data = self.text_bytes(content)
 
-            full_path = (self.base_dir / file_path).resolve()
+            full_path = (self.base_dir / self._map(file_path)).resolve()
             if not str(full_path).startswith(str(self.base_dir)):
                 raise ValueError("Invalid path")
             if full_path.exists() and full_path.is_dir():
@@ -389,7 +397,11 @@ class FileBrowser:
 
                         entry_data: Dict[str, Any] = {
                             "name": filename,
-                            "path": str(entry_path.relative_to(self.base_dir)),
+                            "path": (
+                                str(entry_path)
+                                if self.local_root
+                                else str(entry_path.relative_to(self.base_dir))
+                            ),
                             "modified": datetime.fromtimestamp(
                                 stat_info.st_mtime,
                                 tz=Localization.get().get_tzinfo(),
@@ -438,6 +450,7 @@ class FileBrowser:
 
     def get_files(self, current_path: str = "") -> Dict:
         try:
+            current_path = self._map(current_path)
             # Resolve the full path while preventing directory traversal
             full_path = (self.base_dir / current_path).resolve()
             if not str(full_path).startswith(str(self.base_dir)):
@@ -484,7 +497,7 @@ class FileBrowser:
 
     def get_full_path(self, file_path: str, allow_dir: bool = False) -> str:
         """Get full file path if it exists and is within base_dir"""
-        full_path = files.get_abs_path(self.base_dir, file_path)
+        full_path = files.get_abs_path(self.base_dir, self._map(file_path))
         if not files.exists(full_path):
             raise ValueError(f"File {file_path} not found")
         return full_path

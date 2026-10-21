@@ -186,7 +186,8 @@ class CodeExecution(Tool):
 
     async def execute_nodejs_code(self, cfg: dict, session: int, code: str, reset: bool = False):
         escaped_code = shlex.quote(code)
-        command = f"node /exe/node_eval.js {escaped_code}"
+        node_eval = files.get_abs_path("docker/run/fs/exe/node_eval.js")
+        command = f"node {shlex.quote(node_eval)} {escaped_code}"
         prefix = "node> " + self.format_command_for_output(code) + "\n\n"
         return await self.terminal_session(cfg, session, command, reset, prefix)
 
@@ -551,6 +552,12 @@ class CodeExecution(Tool):
         if not path:
             return None
 
+        if runtime.is_local_runtime():
+            # bare metal: the host path is the real path, /a0/... is only a display prefix
+            local = files.fix_dev_path(path)
+            await runtime.call_development_function(make_dir, local)
+            return local
+
         normalized = files.normalize_a0_path(path)
         await runtime.call_development_function(make_dir, normalized)
         return normalized
@@ -563,7 +570,10 @@ class CodeExecution(Tool):
 def _resolve_ssh_enabled(raw_value) -> bool:
     val = str(raw_value).strip().lower()
     if val == "auto":
-        return not runtime.is_dockerized()
+        # dockerized: shell lives in the container (local TTY)
+        # bare metal + local runtime: shell lives on the host (local TTY)
+        # bare metal without local runtime: SSH into the Dockerized counterpart (dev setup)
+        return not runtime.is_dockerized() and not runtime.is_local_runtime()
     return val in ("true", "1", "yes", "on")
 
 
