@@ -26,7 +26,8 @@ WITH_OFFICE=0
 WITH_DESKTOP=0
 WITH_ARCHIVES=1
 INSTALL_CLI=1
-WITH_SYSTEMD=0
+WITH_WITH_SYSTEMD=0
+PACKAGES_ONLY=0
 PYTHON_SPEC="3.12"
 
 RED='\033[0;31m'; GREEN='\033[0;32m'; YELLOW='\033[1;33m'; BLUE='\033[0;34m'; NC='\033[0m'
@@ -49,6 +50,7 @@ Options:
   --with-desktop         Install Xpra + XFCE for the Desktop plugin.
   --no-archives          Skip 7z support for rar/7z/gz archives.
   --no-system-packages   Skip apt/pacman packages (Python/browser only).
+  --packages-only        Install system packages, then exit (run with sudo).
   --no-cli               Skip installing the A0 CLI (`a0`).
   --systemd              Install and enable a systemd --user service.
   --python SPEC          Python version for the venv (default 3.12).
@@ -70,6 +72,7 @@ while [ $# -gt 0 ]; do
     --no-system-packages) INSTALL_PACKAGES=0; shift ;;
     --no-cli) INSTALL_CLI=0; shift ;;
     --systemd) WITH_SYSTEMD=1; shift ;;
+    --packages-only) PACKAGES_ONLY=1; shift ;;
     --python) PYTHON_SPEC="${2:?--python needs a value}"; shift 2 ;;
     --python=*) PYTHON_SPEC="${1#*=}"; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -140,6 +143,10 @@ install_system_packages() {
 
 if [ "$INSTALL_PACKAGES" -eq 1 ]; then
   install_system_packages
+  if [ "$PACKAGES_ONLY" -eq 1 ]; then
+    ok "System packages installed."
+    exit 0
+  fi
 else
   warn "Skipping system packages (--no-system-packages)."
 fi
@@ -176,7 +183,8 @@ if [ -n "$DATA_DIR" ]; then
   fi
   ln -sfn "$DATA_DIR" usr
 fi
-mkdir -p usr
+mkdir -p usr usr/agents usr/plugins usr/skills usr/knowledge usr/workdir \
+  usr/uploads usr/chats usr/scheduler usr/memory usr/projects
 if [ ! -f usr/.env ]; then
   : > usr/.env
 fi

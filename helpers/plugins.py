@@ -257,6 +257,7 @@ def get_plugins_list():
     result: list[str] = []
     seen_names: set[str] = set()
     for root in get_plugin_roots():
+        Path(root).mkdir(parents=True, exist_ok=True)
         for dir in Path(root).iterdir():
             if not dir.is_dir() or dir.name.startswith("."):
                 continue
