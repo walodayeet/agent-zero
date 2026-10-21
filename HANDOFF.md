@@ -38,7 +38,9 @@ installs, no full-system upgrade (`pacman -S --needed`, `apt-get install`).
 1. `/a0` is display syntax; on bare metal it maps to the checkout.
    - Core mapping: `helpers/files.py::_resolve_path`, `display_path()`.
    - Compatibility symlinks: `/a0`, `/exe`, `/opt/venv-a0`, `/opt/venv` (installer).
-   - File browser: local root + `_map()`; download/zip/extract map `/a0` too.
+   - File browser: local root + `_map()`, directory listing via `os.scandir`
+     (no `ls` parsing — this broke on hosts with non-default `ls` output and on
+     Windows); download/zip/extract map `/a0` too.
 2. Code execution: `ssh_enabled: auto` resolves to a local TTY off Docker;
    workdir is a real host path; node uses `docker/run/fs/exe/node_eval.js`.
 3. Job loop must not self-pause on bare metal (scheduler + job extensions).

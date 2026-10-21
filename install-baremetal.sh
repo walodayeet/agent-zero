@@ -270,7 +270,8 @@ install_compat_links() {
   link_if_free() {
     local link="$1" target="$2"
     if [ -L "$link" ]; then
-      if [ "$(readlink -f "$link" 2>/dev/null)" = "$(readlink -f "$target" 2>/dev/null)" ]; then
+      if [ "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$link" 2>/dev/null)" = \
+           "$(python3 -c 'import os,sys; print(os.path.realpath(sys.argv[1]))' "$target" 2>/dev/null)" ]; then
         return 0
       fi
       warn "$link already points elsewhere; leaving it."

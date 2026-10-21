@@ -122,7 +122,7 @@ Platform support:
 | Platform | Installer | Notes |
 |---|---|---|
 | Linux (Debian/Ubuntu, Arch/CachyOS) | `install-baremetal.sh` | apt or pacman, optional systemd user service |
-| macOS | `install-baremetal.sh` | Homebrew packages; `--systemd` is skipped; Desktop plugin needs Linux/Xpra |
+| macOS | `install-baremetal.sh` | Homebrew packages; systemd and the Xpra/XFCE desktop stack are skipped; the script avoids bash-4-only builtins on the macOS path |
 | Windows 10/11 | `install-baremetal.ps1` + `run-baremetal.ps1` | winget packages; `C:\a0`, `C:\exe`, `C:\opt\venv*` junctions when elevated; Desktop plugin unavailable |
 
 What the installer does:

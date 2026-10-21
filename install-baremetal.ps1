@@ -116,6 +116,20 @@ $env:VIRTUAL_ENV = Join-Path $repo ".venv"
 & uv pip install -r requirements.txt ipython pip setuptools wheel
 if ($LASTEXITCODE -ne 0) { Write-Err "Dependency installation failed."; exit 1 }
 
+# 7-Zip is not added to PATH by its installer; expose it for archive extraction.
+$sevenZip = Join-Path $env:ProgramFiles "7-Zip"
+if (Test-Path (Join-Path $sevenZip "7z.exe")) {
+    if (-not ($env:PATH -split ";" | Where-Object { $_ -eq $sevenZip })) {
+        $env:PATH = "$sevenZip;$env:PATH"
+        try {
+            $userPath = [Environment]::GetEnvironmentVariable("PATH", "User")
+            if (-not ($userPath -split ";" | Where-Object { $_ -eq $sevenZip })) {
+                [Environment]::SetEnvironmentVariable("PATH", "$sevenZip;$userPath", "User")
+            }
+        } catch { Write-Warn "Could not persist 7-Zip on the user PATH." }
+    }
+}
+
 # ------------------------------------------------------------------ browser ---
 Write-Step "Installing the Patchright Chromium build..."
 $env:PLAYWRIGHT_BROWSERS_PATH = Join-Path $repo "tmp\playwright"

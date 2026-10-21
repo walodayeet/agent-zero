@@ -5,7 +5,6 @@ import base64
 import io
 import stat
 from helpers.file_transfers import write_stream_atomic, FileLimitExceeded
-import subprocess
 from typing import Dict, List, Tuple, Any
 from helpers.security import safe_filename
 from datetime import datetime
@@ -335,68 +334,19 @@ class FileBrowser:
     def _get_file_extension(self, filename: str) -> str:
         return filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
 
-    def _get_files_via_ls(self, full_path: Path) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Get files and folders using ls command for better error handling"""
+    def _get_entries(self, full_path: Path) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+        """List a directory with os.scandir (portable, no shell-output parsing)."""
         files: List[Dict[str, Any]] = []
         folders: List[Dict[str, Any]] = []
 
         try:
-            # Use ls command to get directory listing
-            result = subprocess.run(
-                ['ls', '-la', str(full_path)],
-                capture_output=True,
-                text=True,
-                timeout=30
-            )
-
-            if result.returncode != 0:
-                PrintStyle.error(f"ls command failed: {result.stderr}")
-                return files, folders
-
-            # Parse ls output (skip first line which is "total X")
-            lines = result.stdout.strip().split('\n')
-            if len(lines) <= 1:
-                return files, folders
-
-            for line in lines[1:]:  # Skip the "total" line
-                try:
-                    # Skip current and parent directory entries
-                    if line.endswith(' .') or line.endswith(' ..'):
-                        continue
-
-                    # Parse ls -la output format
-                    parts = line.split()
-                    if len(parts) < 9:
-                        continue
-
-                    # Check if this is a symlink (permissions start with 'l')
-                    permissions = parts[0]
-                    is_symlink = permissions.startswith('l')
-
-                    if is_symlink:
-                        # For symlinks, extract the name before the '->' arrow
-                        full_name_part = ' '.join(parts[8:])
-                        if ' -> ' in full_name_part:
-                            filename = full_name_part.split(' -> ')[0]
-                            symlink_target = full_name_part.split(' -> ')[1]
-                        else:
-                            filename = full_name_part
-                            symlink_target = None
-                    else:
-                        filename = ' '.join(parts[8:])  # Handle filenames with spaces
-                        symlink_target = None
-
-                    if not filename:
-                        continue
-
-                    # Get full path for this entry
-                    entry_path = full_path / filename
-
+            with os.scandir(full_path) as iterator:
+                for entry in iterator:
                     try:
-                        stat_info = entry_path.stat()
-
+                        stat_info = entry.stat(follow_symlinks=True)
+                        entry_path = full_path / entry.name
                         entry_data: Dict[str, Any] = {
-                            "name": filename,
+                            "name": entry.name,
                             "path": (
                                 str(entry_path)
                                 if self.local_root
@@ -405,47 +355,43 @@ class FileBrowser:
                             "modified": datetime.fromtimestamp(
                                 stat_info.st_mtime,
                                 tz=Localization.get().get_tzinfo(),
-                            ).isoformat()
+                            ).isoformat(),
                         }
 
-                        # Add symlink information if this is a symlink
-                        if is_symlink and symlink_target:
-                            entry_data["symlink_target"] = symlink_target
+                        if entry.is_symlink():
                             entry_data["is_symlink"] = True
+                            try:
+                                entry_data["symlink_target"] = os.readlink(entry.path)
+                            except OSError:
+                                pass
 
-                        if entry_path.is_file():
+                        if entry.is_file(follow_symlinks=True):
                             entry_data.update({
-                                "type": self._get_file_type(filename),
+                                "type": self._get_file_type(entry.name),
                                 "size": stat_info.st_size,
-                                "is_dir": False
+                                "is_dir": False,
                             })
                             files.append(entry_data)
-                        elif entry_path.is_dir():
+                        elif entry.is_dir(follow_symlinks=True):
                             entry_data.update({
                                 "type": "folder",
-                                "size": 0,  # Directories show as 0 bytes
-                                "is_dir": True
+                                "size": 0,
+                                "is_dir": True,
                             })
                             folders.append(entry_data)
 
                     except (OSError, PermissionError, FileNotFoundError) as e:
-                        # Log error but continue with other files
-                        PrintStyle.warning(f"No access to {filename}: {e}")
+                        PrintStyle.warning(f"No access to {getattr(entry, 'name', '?')}: {e}")
                         continue
 
                     if len(files) + len(folders) > 10000:
                         break
 
-                except Exception as e:
-                    # Log error and continue with next line
-                    PrintStyle.error(f"Error parsing ls line '{line}': {e}")
-                    continue
+        except (OSError, PermissionError) as e:
+            PrintStyle.error(f"Error reading directory: {e}")
 
-        except subprocess.TimeoutExpired:
-            PrintStyle.error("ls command timed out")
-        except Exception as e:
-            PrintStyle.error(f"Error running ls command: {e}")
-
+        files.sort(key=lambda item: item["name"].lower())
+        folders.sort(key=lambda item: item["name"].lower())
         return files, folders
 
     def get_files(self, current_path: str = "") -> Dict:
@@ -461,7 +407,7 @@ class FileBrowser:
                 raise NotADirectoryError("Path is not a directory")
 
             # Use ls command instead of os.scandir for better error handling
-            files, folders = self._get_files_via_ls(full_path)
+            files, folders = self._get_entries(full_path)
 
             # Combine folders and files, folders first
             all_entries = folders + files
