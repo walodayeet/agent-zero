@@ -146,8 +146,13 @@ def _run_soffice(soffice: str, args: list[str], timeout: int) -> subprocess.Comp
     env = {
         **os.environ,
         "HOME": os.environ.get("HOME") or "/tmp",
-        "SAL_USE_VCLPLUGIN": os.environ.get("SAL_USE_VCLPLUGIN") or "gen",
     }
+    # Bare-metal LibreOffice builds may not ship the "gen" VCL plugin, and forcing
+    # it makes headless conversion exit 0 without output. Honour an explicit
+    # override only (A0_OFFICE_VCLPLUGIN), otherwise let soffice pick.
+    vcl = os.environ.get("A0_OFFICE_VCLPLUGIN", "").strip()
+    if vcl:
+        env["SAL_USE_VCLPLUGIN"] = vcl
     return subprocess.run(
         [soffice, *args],
         check=False,

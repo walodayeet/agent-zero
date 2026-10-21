@@ -94,7 +94,7 @@ APT_OFFICE=(libreoffice python3-uno fonts-crosextra-carlito fonts-crosextra-cala
 APT_ARCHIVES=(p7zip-full)
 APT_DESKTOP=(
   xpra xpra-html5 xpra-x11 xvfb xfce4-session xfce4-panel xfwm4
-  xfce4-settings thunar dbus-x11 xdotool x11-apps x11-utils x11-xserver-utils
+  xfce4-settings thunar xfce4-terminal dbus-x11 xdotool x11-apps x11-utils x11-xserver-utils
   xauth xclip
 )
 PACMAN_CORE=(python python-pip base-devel curl git ffmpeg tesseract
@@ -103,7 +103,7 @@ PACMAN_CORE=(python python-pip base-devel curl git ffmpeg tesseract
 PACMAN_OFFICE=(libreoffice-fresh)
 PACMAN_ARCHIVES=(7zip)
 PACMAN_DESKTOP=(xpra xorg-server-xvfb xfce4-session xfce4-panel xfwm4
-  xfce4-settings thunar xdotool xorg-xrandr xorg-xauth dbus)
+  xfce4-settings thunar xfce4-terminal xdotool xorg-xrandr xorg-xauth dbus)
 
 as_root() {
   if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi
