@@ -1,6 +1,7 @@
 import argparse
 from urllib.parse import urlsplit, urlunsplit
 import inspect
+import os
 import secrets
 from pathlib import Path
 from typing import TypeVar, Callable, Awaitable, Union, overload, cast
@@ -45,6 +46,8 @@ def initialize():
             key, value = arg.split("=", 1)
             key = key.lstrip("-")
             args[key] = value
+
+    ensure_loopback_no_proxy()
 
 
 def get_arg(name: str):
@@ -100,6 +103,18 @@ def normalize_local_url(url: str) -> str:
         return url
     netloc = "127.0.0.1" + (f":{parsed.port}" if parsed.port else "")
     return urlunsplit((parsed.scheme, netloc, parsed.path, parsed.query, parsed.fragment))
+
+
+def ensure_loopback_no_proxy() -> None:
+    """Never send loopback traffic through a proxy (bare metal only)."""
+    if not is_local_runtime():
+        return
+    for var in ("NO_PROXY", "no_proxy"):
+        current = [part.strip() for part in os.environ.get(var, "").split(",") if part.strip()]
+        for host in ("localhost", "127.0.0.1", "::1"):
+            if host not in current:
+                current.append(host)
+        os.environ[var] = ",".join(current)
 
 
 def get_local_url():

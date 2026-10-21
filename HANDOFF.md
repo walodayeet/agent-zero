@@ -71,6 +71,9 @@ environmental (Docker socket, credentials, external services, root installers).
   unchanged. `run-baremetal.sh`/`.ps1` append loopback hosts to `NO_PROXY`.
 - Model search honors a custom `api_base` for providers whose metadata ships an
   absolute endpoint (e.g. OpenAI) and bypasses proxy env for loopback hosts.
+- `runtime.initialize()` appends loopback hosts to `NO_PROXY` on bare metal, so
+  manually started instances behave like the launcher.
+- Launchers fail fast when the port is taken and print the owning process.
 - Diagnose gateways with `scripts/check-local-gateway.sh URL KEY [MODEL]`
   (uses `curl --noproxy '*'`, so it tests the gateway, not the proxy).
 - `A0_KEEP_LOCALHOST=1` disables the localhost→127.0.0.1 rewrite for IPv6-only

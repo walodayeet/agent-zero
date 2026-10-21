@@ -70,6 +70,28 @@ else
 fi
 export no_proxy="$NO_PROXY"
 
+# Fail fast with an actionable message instead of a uvicorn Errno 98 trace.
+port_busy() {
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltn "sport = :${A0_PORT}" 2>/dev/null | grep -q LISTEN && return 0
+    return 1
+  fi
+  python3 - "$A0_PORT" <<'PYCHECK' >/dev/null 2>&1
+import socket, sys
+s = socket.socket()
+s.settimeout(0.5)
+sys.exit(0 if s.connect_ex(("127.0.0.1", int(sys.argv[1]))) == 0 else 1)
+PYCHECK
+}
+if port_busy; then
+  echo "Port ${A0_PORT} is already in use:" >&2
+  if command -v ss >/dev/null 2>&1; then
+    ss -ltnp "sport = :${A0_PORT}" 2>/dev/null | sed -n '2p' >&2
+  fi
+  echo "Stop the other Agent Zero instance (pgrep -af run_ui.py) or start with A0_PORT=5080." >&2
+  exit 1
+fi
+
 if [ -z "${SEARXNG_URL:-}" ]; then
   if curl -fsS -m 2 -o /dev/null -X POST http://127.0.0.1:8888/search -d 'q=ping&format=json' 2>/dev/null; then
     export SEARXNG_URL="http://127.0.0.1:8888/search"

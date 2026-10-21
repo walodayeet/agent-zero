@@ -20,6 +20,14 @@ if ($env:NO_PROXY) {
 }
 $env:no_proxy = $env:NO_PROXY
 
+$busy = Get-NetTCPConnection -LocalPort ([int]$port) -State Listen -ErrorAction SilentlyContinue
+if ($busy) {
+    $owner = ($busy | Select-Object -First 1).OwningProcess
+    $proc = Get-Process -Id $owner -ErrorAction SilentlyContinue
+    Write-Error "Port $port is already in use by PID $owner ($($proc.ProcessName)). Stop the other Agent Zero instance or set A0_PORT."
+    exit 1
+}
+
 $python = Join-Path $PSScriptRoot ".venv\Scripts\python.exe"
 if (-not (Test-Path $python)) {
     Write-Error "Missing .venv. Run: powershell -ExecutionPolicy Bypass -File .\install-baremetal.ps1"

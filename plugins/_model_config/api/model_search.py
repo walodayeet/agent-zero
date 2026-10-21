@@ -143,6 +143,12 @@ class ModelSearch(ApiHandler):
                     resp = await client.get(candidate_url, headers=headers, params=params)
                     if resp.status_code == 200:
                         combined.extend(self._parse(resp.json(), candidate_fmt))
+                    elif resp.status_code in (401, 403):
+                        key_name = "API_KEY_" + provider.upper().replace("-", "_")
+                        errors.append(
+                            f"{candidate_url}: HTTP {resp.status_code} — check the key saved for "
+                            f"provider '{provider}' ({key_name})"
+                        )
                     else:
                         errors.append(f"{candidate_url}: HTTP {resp.status_code}")
         except Exception as exc:
