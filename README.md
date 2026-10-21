@@ -156,9 +156,8 @@ Compatibility:
   `./scripts/check-local-gateway.sh http://127.0.0.1:8317/v1 KEY [MODEL]`.
   In Docker mode `localhost` means the container: use
   `host.docker.internal` (add `--add-host=host.docker.internal:host-gateway` on
-  Linux) or host networking (`./scripts/run-docker.sh`). Launchers add loopback
-  hosts to `NO_PROXY`. Set `A0_KEEP_LOCALHOST=1` if a gateway binds IPv6 `::1`
-  only and you need `localhost` left untouched.
+  Linux). Launchers add loopback hosts to `NO_PROXY`. Set `A0_KEEP_LOCALHOST=1`
+  if a gateway binds IPv6 `::1` only and you need `localhost` left untouched.
 
 On Arch/CachyOS the installer only installs missing packages with
 `pacman -S --needed --noconfirm` (no `-Syu`); run a system upgrade yourself when
@@ -167,33 +166,12 @@ recent Xpra. `sudo -v` is requested once, not per package.
 
 See `./install-baremetal.sh --help` for every flag.
 
-## Docker with host networking (default for this fork)
+## Docker is untouched
 
-Container `localhost` normally means the container, so local gateways must be
-reached through `host.docker.internal`. This fork ships a runner that uses host
-networking by default, making `127.0.0.1` inside A0 mean the host — same as bare
-metal.
-
-```bash
-./scripts/run-docker.sh                     # host network, 127.0.0.1:80
-A0_PORT=5080 ./scripts/run-docker.sh        # custom port
-A0_WEB_UI_HOST=0.0.0.0 A0_PORT=5080 ./scripts/run-docker.sh   # LAN
-./scripts/run-docker.sh --bridge            # isolated network + published port
-./scripts/run-docker.sh --build-local       # build this fork (DockerfileLocal)
-
-# or compose:
-A0_PORT=5080 docker compose -f docker/run/docker-compose.host.yml up -d
-```
-
-Host mode mounts the checkout at `/a0` (fork patches active), patches the
-container UI port/host from `A0_WEB_UI_PORT`/`A0_WEB_UI_HOST`, and skips the
-container sshd and bundled SearXNG because ports 22 and 8080/55510 usually collide
-with host services. Set `SEARXNG_URL` to a host instance if you want search.
-
-Launcher-managed containers and the A0 Install CLI are separate: they keep their
-own bridged networking, so use `host.docker.internal` there (Linux:
-`--add-host=host.docker.internal:host-gateway`). The bare-metal installers are not
-affected by any of this.
+This fork targets native (bare-metal) Agent Zero. `docker/`, `DockerfileLocal`
+and the launcher/A0 Install flows are unmodified upstream code and are not part of
+the native setup. Native A0 already uses host networking: model, browser and
+search calls are direct host sockets, and `127.0.0.1` is the machine running A0.
 
 ## Troubleshooting
 

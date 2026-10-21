@@ -13,6 +13,6 @@ done
 
 exec python /a0/run_tunnel.py \
     --dockerized=true \
-    --port="${A0_WEB_UI_PORT:-80}" \
+    --port=80 \
     --tunnel_api_port=55520 \
     --host="0.0.0.0"
