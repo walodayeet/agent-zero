@@ -111,13 +111,15 @@ APT_DESKTOP=(
   xfce4-settings thunar xfce4-terminal dbus-x11 xdotool x11-apps x11-utils x11-xserver-utils
   xauth xclip x11vnc novnc
 )
-PACMAN_CORE=(python python-pip base-devel curl git ffmpeg tesseract ripgrep jq nodejs npm
-  ttf-dejavu ttf-liberation noto-fonts-emoji nss nspr atk at-spi2-atk at-spi2-core
-  cups libxcomposite libxdamage libxkbcommon pango cairo mesa alsa-lib xclip wl-clipboard)
+PACMAN_CORE=(python curl git ffmpeg tesseract ripgrep jq nodejs npm
+  ttf-dejavu ttf-liberation noto-fonts-emoji nss nspr atk at-spi2-core
+  cups libxcomposite libxdamage libxkbcommon libxrandr pango cairo mesa alsa-lib
+  gtk3 xclip wl-clipboard)
 PACMAN_OFFICE=(libreoffice-fresh)
 PACMAN_ARCHIVES=(7zip)
 PACMAN_DESKTOP=(xpra xorg-server-xvfb xfce4-session xfce4-panel xfwm4
-  xfce4-settings thunar xfce4-terminal xdotool xorg-xrandr xorg-xauth dbus)
+  xfce4-settings thunar xfce4-terminal xdotool xorg-xrandr xorg-xauth dbus
+  x11-apps x11vnc novnc)
 
 as_root() {
   if [ "$(id -u)" -eq 0 ]; then "$@"; else sudo "$@"; fi
@@ -144,7 +146,32 @@ apt_install_group() {
   fi
 }
 
+sudo_preflight() {
+  if [ "$(id -u)" -ne 0 ]; then
+    if ! sudo -v; then
+      die "System packages need root (sudo) or --no-system-packages."
+    fi
+  fi
+}
+
+pac_install_group() {
+  local label="$1"; shift
+  [ "$#" -eq 0 ] && return 0
+  local pkg
+  info "Installing $label..."
+  for pkg in "$@"; do
+    if ! pacman -Si "$pkg" >/dev/null 2>&1; then
+      warn "pacman: $pkg is not in the current sync DB, skipping (run 'sudo pacman -Syu' manually if the DB is stale)."
+      continue
+    fi
+    if ! as_root pacman -S --needed --noconfirm "$pkg"; then
+      warn "pacman: $pkg failed to install; continuing."
+    fi
+  done
+}
+
 install_system_packages() {
+  sudo_preflight
   if command -v apt-get >/dev/null 2>&1; then
     as_root apt-get update -y
 
@@ -179,17 +206,16 @@ install_system_packages() {
       apt_install_group "desktop packages" "${desktop[@]}"
     fi
   elif command -v pacman >/dev/null 2>&1; then
-    local pkgs=("${PACMAN_CORE[@]}")
-    [ "$WITH_OFFICE" -eq 1 ] && pkgs+=("${PACMAN_OFFICE[@]}")
-    [ "$WITH_ARCHIVES" -eq 1 ] && pkgs+=("${PACMAN_ARCHIVES[@]}")
-    info "Installing packages with pacman..."
-    as_root pacman -Syu --needed --noconfirm "${pkgs[@]}" || warn "Some core packages failed."
+    # Never run -Syu here: a full system upgrade is the user's decision.
+    pac_install_group "core packages" "${PACMAN_CORE[@]}"
+    if [ "$WITH_OFFICE" -eq 1 ]; then
+      pac_install_group "office packages" "${PACMAN_OFFICE[@]}"
+    fi
+    if [ "$WITH_ARCHIVES" -eq 1 ]; then
+      pac_install_group "archive packages" "${PACMAN_ARCHIVES[@]}"
+    fi
     if [ "$WITH_DESKTOP" -eq 1 ]; then
-      # xpra is AUR-only on Arch; try packages individually so one miss does not abort.
-      local pkg
-      for pkg in "${PACMAN_DESKTOP[@]}"; do
-        as_root pacman -S --needed --noconfirm "$pkg" || warn "pacman: $pkg unavailable (desktop plugin will report it)."
-      done
+      pac_install_group "desktop packages" "${PACMAN_DESKTOP[@]}"
     fi
   else
     warn "No apt-get or pacman found; skipping system packages."
@@ -259,7 +285,13 @@ fi
 command -v uv >/dev/null 2>&1 || die "uv installation failed."
 
 info "Creating Python $PYTHON_SPEC environment..."
-uv venv .venv --python "$PYTHON_SPEC" || uv venv .venv
+if ! uv venv .venv --python "$PYTHON_SPEC" --allow-existing; then
+  if [ -x .venv/bin/python ]; then
+    warn "uv venv could not update the existing environment; reusing it."
+  else
+    die "Could not create the Python environment."
+  fi
+fi
 info "Installing Python dependencies..."
 VIRTUAL_ENV="$REPO_DIR/.venv" uv pip install -r requirements.txt ipython pip setuptools wheel
 
@@ -267,7 +299,7 @@ VIRTUAL_ENV="$REPO_DIR/.venv" uv pip install -r requirements.txt ipython pip set
 info "Installing the Patchright Chromium build..."
 PLAYWRIGHT_BROWSERS_PATH="$REPO_DIR/tmp/playwright" .venv/bin/patchright install chromium --no-shell || \
   warn "Chromium download failed; it will retry on first Browser use."
-if [ "$INSTALL_PACKAGES" -eq 1 ]; then
+if [ "$INSTALL_PACKAGES" -eq 1 ] && command -v apt-get >/dev/null 2>&1; then
   .venv/bin/patchright install-deps chromium >/dev/null 2>&1 || \
     warn "Browser system libraries were not fully installed; install them manually if Browser fails."
 fi
@@ -358,8 +390,8 @@ fi
 
 # ---------------------------------------------------------------- A0 CLI ----
 if [ "$INSTALL_CLI" -eq 1 ]; then
-  if command -v a0 >/dev/null 2>&1; then
-    ok "A0 CLI already installed: $(command -v a0)"
+  if command -v a0 >/dev/null 2>&1 && a0 --version >/dev/null 2>&1; then
+    ok "A0 CLI already installed: $(command -v a0) ($(a0 --version 2>/dev/null | head -1))"
   else
     info "Installing the A0 CLI (a0-connector)..."
     if curl -LsSf https://raw.githubusercontent.com/agent0ai/a0-connector/main/install.sh | sh; then

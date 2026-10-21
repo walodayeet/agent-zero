@@ -139,6 +139,11 @@ Compatibility:
 - **Self-update** stays disabled outside Docker (`supported: false`); update with
   `git pull` and reinstall dependencies.
 
+On Arch/CachyOS the installer only installs missing packages with
+`pacman -S --needed --noconfirm` (no `-Syu`); run a system upgrade yourself when
+you want one. On Debian/Ubuntu it uses `apt-get` and adds the xpra.org repo for a
+recent Xpra. `sudo -v` is requested once, not per package.
+
 See `./install-baremetal.sh --help` for every flag.
 
 ## Troubleshooting
