@@ -7,10 +7,9 @@ from helpers import runtime
 # The Docker image ships a bundled SearXNG on 55510. Bare-metal installs use
 # SEARXNG_URL when set, otherwise the first reachable instance from the defaults.
 # DuckDuckGo is the last resort (it rate-limits aggressively on shared IPs).
-DEFAULT_SEARXNG_URLS = (
-    "http://localhost:55510/search",
-    "http://127.0.0.1:8888/search",
-)
+# Docker images ship the bundled instance on 55510; bare metal sets SEARXNG_URL
+# (see run-baremetal.sh) to any reachable SearXNG JSON endpoint.
+DEFAULT_SEARXNG_URLS = ("http://localhost:55510/search",)
 SEARXNG_TIMEOUT = 8
 
 

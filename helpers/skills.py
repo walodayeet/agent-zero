@@ -315,7 +315,7 @@ def skill_from_markdown(
     if fm_errors:
         _warn_skill_skipped(skill_md_path, text, fm_errors)
         return None
-    skill_dir = Path(files.normalize_a0_path(str(skill_md_path.parent)))
+    skill_dir = Path(skill_md_path.parent)
 
     name = str(fm.get("name") or fm.get("skill") or "").strip()
     description = str(
@@ -819,7 +819,7 @@ def list_skill_catalog(
             if not skill:
                 continue
 
-            runtime_path = files.normalize_a0_path(str(skill.path))
+            runtime_path = files.display_path(str(skill.path))
             if runtime_path in seen_paths:
                 continue
 
@@ -1271,7 +1271,7 @@ def build_active_skills_prompt(agent: Agent | None) -> str:
 def _format_skill_prompt(skill: Skill) -> str:
     lines = [
         f"Skill: {skill.name or skill.path.name}",
-        f"Path: {files.normalize_a0_path(str(skill.path))}",
+        f"Path: {files.display_path(str(skill.path))}",
     ]
 
     if skill.description:
@@ -1293,7 +1293,7 @@ def _get_skill_origin(skill_path: str, project_name: str = "") -> str:
     if files.exists(user_root) and files.is_in_dir(abs_path, user_root):
         return "User"
 
-    normalized_path = files.normalize_a0_path(abs_path)
+    normalized_path = abs_path
     if "/usr/plugins/" in normalized_path:
         return "Community plugin"
     if "/plugins/" in normalized_path:
@@ -1331,11 +1331,9 @@ def _normalize_active_skill_entry(item: Any) -> ActiveSkillEntry | None:
 
 def _normalize_active_skill_path(path: str) -> str:
     fixed = path.strip().replace("\\", "/")
-    if fixed.startswith("/a0/"):
-        return fixed.rstrip("/")
     if fixed.startswith("/"):
-        return files.normalize_a0_path(fixed).rstrip("/")
-    return files.normalize_a0_path(files.get_abs_path(fixed)).rstrip("/")
+        return files.display_path(fixed).rstrip("/")
+    return files.display_path(files.get_abs_path(fixed)).rstrip("/")
 
 
 def _entry_key(entry: ActiveSkillEntry) -> str:
@@ -1488,7 +1486,7 @@ def _resolve_active_skill_entries(
         if not skill:
             continue
 
-        runtime_path = files.normalize_a0_path(str(skill.path))
+        runtime_path = files.display_path(str(skill.path))
         if runtime_path in seen_paths:
             continue
 
@@ -1552,7 +1550,7 @@ def _load_skill_from_runtime_path(
 def _skill_entry(skill: Skill) -> ActiveSkillEntry:
     return {
         "name": skill.name or skill.path.name,
-        "path": files.normalize_a0_path(str(skill.path)),
+        "path": files.display_path(str(skill.path)),
     }
 
 
@@ -1596,7 +1594,7 @@ def _skill_visibility_aliases(
         values = (
             skill_or_entry.name,
             skill_or_entry.path.name,
-            files.normalize_a0_path(str(skill_or_entry.path)),
+            files.display_path(str(skill_or_entry.path)),
         )
     elif isinstance(skill_or_entry, dict):
         values = (

@@ -629,7 +629,7 @@ def display_path(path: str) -> str:
     from helpers import runtime
 
     if runtime.is_local_runtime():
-        return str(path)
+        return fix_dev_path(str(path))
     return normalize_a0_path(str(path))
 
 

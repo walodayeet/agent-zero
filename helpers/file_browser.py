@@ -1,5 +1,5 @@
 import os
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 import shutil
 import base64
 import io
@@ -481,15 +481,19 @@ class FileBrowser:
                     parent_path = ""
 
             if self.local_root:
-                # keep the docker-style display the UI expects
-                rel = "" if mapped_path in ("", ".") else mapped_path
+                # keep the docker-style display the UI expects, derived from the
+                # resolved target so "/a0/..." and absolute host inputs both map
+                try:
+                    rel = full_path.relative_to(Path(self.base_dir).resolve()).as_posix()
+                except ValueError:
+                    rel = ""
+                rel = "" if rel == "." else rel
                 display_path = "/a0" + (f"/{rel}" if rel else "")
-                if not parent_path:
+                if not rel:
                     display_parent = ""
-                elif parent_path == ".":
-                    display_parent = "/a0"
                 else:
-                    display_parent = f"/a0/{parent_path}"
+                    parent = PurePosixPath(rel).parent.as_posix()
+                    display_parent = "/a0" + (f"/{parent}" if parent != "." else "")
             else:
                 display_path = current_path
                 display_parent = parent_path

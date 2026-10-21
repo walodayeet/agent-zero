@@ -1,5 +1,12 @@
 #!/usr/bin/env bash
 # Agent Zero on bare metal: Python server + host terminal (no Docker, no RFC).
+#
+# Works for direct CLI use and as the systemd ExecStart target. Environment:
+#   A0_HOST       bind address (default 127.0.0.1; use 0.0.0.0 for LAN/remote access)
+#   A0_PORT       web UI port (default 5000)
+#   A0_DATA_DIR   user data directory (default <repo>/usr)
+#   SEARXNG_URL   SearXNG JSON endpoint (default http://127.0.0.1:8888/search when present)
+#   ALLOWED_ORIGINS  extra CORS origins, appended to the derived local/host origins
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -9,7 +16,44 @@ export PATH="$PWD/.venv/bin:$PATH"
 export PLAYWRIGHT_BROWSERS_PATH="$PWD/tmp/playwright"
 export A0_PORT="${A0_PORT:-5000}"
 export A0_HOST="${A0_HOST:-127.0.0.1}"
-# Login is disabled by default; allow the local origin so the UI can call the API.
-export ALLOWED_ORIGINS="${ALLOWED_ORIGINS:-http://${A0_HOST}:${A0_PORT},http://localhost:${A0_PORT},http://127.0.0.1:${A0_PORT}}"
+
+if [ -n "${A0_DATA_DIR:-}" ]; then
+  mkdir -p "$A0_DATA_DIR"
+  if [ -L usr ]; then
+    ln -sfn "$A0_DATA_DIR" usr
+  elif [ -d usr ]; then
+    if [ -z "$(ls -A usr 2>/dev/null)" ]; then
+      rmdir usr && ln -sfn "$A0_DATA_DIR" usr
+    else
+      echo "A0_DATA_DIR ignored: $PWD/usr already contains data" >&2
+    fi
+  else
+    ln -sfn "$A0_DATA_DIR" usr
+  fi
+fi
+
+# Login is disabled unless AUTH_LOGIN/AUTH_PASSWORD are set, so the browser origin
+# must be allowlisted or every API call answers 403 "Origin None not allowed".
+if [ -z "${ALLOWED_ORIGINS:-}" ]; then
+  origins="http://localhost:${A0_PORT},http://127.0.0.1:${A0_PORT}"
+  case "$A0_HOST" in
+    0.0.0.0|::|"[::]")
+      host_name="$(hostname -f 2>/dev/null || hostname)"
+      host_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+      [ -n "$host_name" ] && origins="$origins,http://${host_name}:${A0_PORT}"
+      [ -n "$host_ip" ] && origins="$origins,http://${host_ip}:${A0_PORT}"
+      ;;
+    *)
+      origins="$origins,http://${A0_HOST}:${A0_PORT}"
+      ;;
+  esac
+  export ALLOWED_ORIGINS="$origins"
+fi
+
+if [ -z "${SEARXNG_URL:-}" ]; then
+  if curl -fsS -m 2 -o /dev/null -X POST http://127.0.0.1:8888/search -d 'q=ping&format=json' 2>/dev/null; then
+    export SEARXNG_URL="http://127.0.0.1:8888/search"
+  fi
+fi
 
 exec .venv/bin/python run_ui.py --host="$A0_HOST" --port="$A0_PORT" "$@"
