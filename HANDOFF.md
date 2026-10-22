@@ -29,6 +29,23 @@ Paste this file to the next agent maintaining this host/checkout.
   Desktop/Xpra/apt/unix-socket cases), matching the Linux count once its
   POSIX-only skips are removed. `tests/conftest.py` points Playwright at the
   installer's `tmp/playwright` cache so the DOM regressions run without env setup.
+  Windows latency notes (measured on that box): ConPTY input must end with CR —
+  sending `\r\n` leaves PowerShell on the `>>` continuation prompt, so the shell
+  never reports a prompt and every command waited out the 15 s idle timeout
+  (`tty_session` now normalises to `\r`; commands return in ~2 s).
+  `api/tunnel_proxy` probed `localhost:55520` with a blocking `requests.post` and
+  no timeout; a closed loopback port costs ~2 s per address there, which stalled
+  `/api/csrf_token` for 4 s and made the WebUI report "backend appears to be
+  disconnected". Local runtime now calls the in-process manager directly and the
+  split-service path uses async httpx with a 0.75 s timeout. UI polls no longer
+  persist the browser timezone (`set_timezone(..., persist=False)`), which used to
+  rewrite `.env` and trigger a settings reload on every poll.
+  `run-baremetal.ps1` defaults `A0_PRELOAD=1` with `A0_PRELOAD_WAIT=0`, so the
+  embedding model warms in the background after HTTP is up: first-turn memory
+  recall 7.2 s -> 0.08 s, at the cost of ~1.7 GB RSS while unused. Remaining turn
+  latency is model-bound: the system prompt is ~68 KB (~15-17 k tokens) with the
+  installed plugins, and the gateway needs ~3 s for that prompt vs ~1.4 s for 82
+  tokens; prompt assembly itself is ~75 ms.
 - Core cross-platform bits: `/a0` mapping uses `os.path`; code execution uses
   `powershell.exe` + pywinpty on Windows; `find_soffice` checks app-bundle and
   Program Files paths.

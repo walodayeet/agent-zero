@@ -97,13 +97,26 @@ class Localization:
         except pytz.exceptions.NonExistentTimeError:
             return tzinfo.localize(dt, is_dst=True)
 
-    def set_timezone(self, timezone: str) -> None:
-        """Set the user's IANA timezone and propagate it to child processes."""
+    def set_timezone(self, timezone: str, persist: bool = True) -> None:
+        """Set the user's IANA timezone and propagate it to child processes.
+
+        ``persist=False`` is for render-time hints (the UI sends its own timezone
+        on every poll): apply it in memory without rewriting ``.env``.
+        """
         try:
             # Validate timezone and compute its current offset
             _ = pytz.timezone(timezone)
             new_offset = self._compute_offset_minutes(timezone)
-            if timezone == self.timezone and new_offset == self._offset_minutes:
+            if new_offset == self._offset_minutes:
+                # Same UTC offset (e.g. the browser's "Asia/Saigon" alias vs the
+                # configured "Asia/Ho_Chi_Minh"): no rendered time changes. Adopt a
+                # poll-time hint in memory only; a real settings change still
+                # persists below.
+                if persist and timezone != self.timezone:
+                    self.timezone = timezone
+                    save_dotenv_value("DEFAULT_USER_TIMEZONE", timezone)
+                elif not persist:
+                    self.timezone = timezone
                 self.apply_process_timezone()
                 return
 
@@ -114,8 +127,9 @@ class Localization:
             )
             self._offset_minutes = new_offset
             self.timezone = timezone
-            save_dotenv_value("DEFAULT_USER_TIMEZONE", timezone)
-            save_dotenv_value("DEFAULT_USER_UTC_OFFSET_MINUTES", str(self._offset_minutes))
+            if persist:
+                save_dotenv_value("DEFAULT_USER_TIMEZONE", timezone)
+                save_dotenv_value("DEFAULT_USER_UTC_OFFSET_MINUTES", str(self._offset_minutes))
             self.apply_process_timezone()
             self._last_timezone_change = datetime.now()
         except pytz.exceptions.UnknownTimeZoneError:

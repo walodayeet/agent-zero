@@ -392,9 +392,12 @@ async def _spawn_winpty(cmd, cwd, env, echo):
             # Use winpty's write method, not os.write
             if isinstance(d, bytes):
                 d = d.decode('utf-8', errors='replace')
-            # Windows needs \r\n for proper line endings
+            # Enter in ConPTY is CR. Expanding "\n" to "\r\n" submits the line with
+            # CR and then feeds LF, which PSReadLine treats as "insert a newline":
+            # PowerShell stays on a ">>" continuation prompt, the prompt pattern
+            # never matches, and every command waits out the 15 s idle timeout.
             if _IS_WIN:
-              d = d.replace('\n', '\r\n')
+                d = d.replace('\r\n', '\r').replace('\n', '\r')
             child.write(d)
 
         async def drain(self):
