@@ -19,6 +19,16 @@ async def preload():
                 **emb_cfg.build_kwargs(),
             )
             await emb_mod.aembed_query("test")
+        # Warm the default vector store too: the first recall otherwise pays for
+        # the FAISS index load plus the knowledge checksum scan (~2.6 s on Windows).
+        # A0_PRELOAD_MEMORY=0 keeps that work on first use.
+        if runtime.preload_memory_enabled():
+            try:
+                from plugins._memory.helpers.memory import Memory
+
+                await Memory.get_by_subdir("default")
+            except Exception:
+                pass
         PrintStyle().print("Preload completed.")
     except Exception as e:
         PrintStyle().error(f"Error in preload: {e}")

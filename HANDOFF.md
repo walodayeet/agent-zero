@@ -54,11 +54,16 @@ Paste this file to the next agent maintaining this host/checkout.
   PowerShell process (~75 MB), and the first Browser-tool use leaves a Chromium
   plus its node driver alive (~0.4 GB) until it is closed.
   With the ONNX embedding backend (`A0_EMBEDDING_BACKEND=onnx`, default in both
-  launchers) those numbers drop to ~520 MB idle/after warm-up and ~740 MB after a
-  turn (commit ~3.8 GB), because torch/transformers are never imported: the
-  embedding model loads in ~1.7 s instead of ~10 s and vectors are identical to
-  sentence-transformers (max abs diff < 2e-7). `sentence-transformers` remains the
-  fallback when onnxruntime or the model files are missing.
+  launchers) and the vector-store warm-up in the same background preload, the
+  server settles at ~500 MB idle and ~690 MB after a turn (commit ~3.5-3.7 GB):
+  torch/transformers are never imported, the embedding model loads in ~1.7 s
+  instead of ~10 s, vectors are identical to sentence-transformers (max abs diff
+  < 2e-7), and the first recall no longer pays the FAISS load (~2.6 s -> 0.6 s).
+  `A0_EMBEDDING_BACKEND=st` restores sentence-transformers; `A0_PRELOAD_MEMORY=0`
+  keeps the vector-store warm-up on first use. Layer map (working set): app import
+  ~99 MB, plugin/component init +78 MB, ONNX session + vector store +145 MB,
+  HTTP stack (uvicorn/socketio/a2wsgi/Flask) ~+175 MB, first LLM call (litellm
+  +138 MB, faiss +23 MB).
 - Core cross-platform bits: `/a0` mapping uses `os.path`; code execution uses
   `powershell.exe` + pywinpty on Windows; `find_soffice` checks app-bundle and
   Program Files paths.

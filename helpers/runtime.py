@@ -227,6 +227,12 @@ def preload_enabled() -> bool:
     return raw not in ("0", "false", "no", "off")
 
 
+def preload_memory_enabled() -> bool:
+    """A0_PRELOAD_MEMORY=0 keeps the vector-store warm-up on first use."""
+    raw = str(dotenv.get_dotenv_value("A0_PRELOAD_MEMORY", "")).strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
 def get_preload_wait_seconds() -> float:
     """How long startup may block on the embedding warm-up.
 
