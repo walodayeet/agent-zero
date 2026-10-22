@@ -46,6 +46,13 @@ Paste this file to the next agent maintaining this host/checkout.
   latency is model-bound: the system prompt is ~68 KB (~15-17 k tokens) with the
   installed plugins, and the gateway needs ~3 s for that prompt vs ~1.4 s for 82
   tokens; prompt assembly itself is ~75 ms.
+  Memory footprint per bare-metal instance (Windows 11, measured working set):
+  server idle with the embedding model unloaded (`A0_PRELOAD=0`) ~515 MB; after
+  the embedding model is warm (background preload or first chat message)
+  ~0.8-1.0 GB, with commit charge 2-5 GB because torch/faiss reserve arenas.
+  The `run-baremetal.ps1` wrapper adds ~140 MB, each open terminal session adds a
+  PowerShell process (~75 MB), and the first Browser-tool use leaves a Chromium
+  plus its node driver alive (~0.4 GB) until it is closed.
 - Core cross-platform bits: `/a0` mapping uses `os.path`; code execution uses
   `powershell.exe` + pywinpty on Windows; `find_soffice` checks app-bundle and
   Program Files paths.
