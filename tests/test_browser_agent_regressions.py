@@ -405,7 +405,7 @@ def test_browser_config_store_lists_supported_host_targets_and_migrates_endpoint
 
     )
 
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True, text=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)
 
 
 def test_browser_config_normalizes_max_open_tabs():
@@ -1684,7 +1684,7 @@ for (const [transport, oldUrl, nextUrl, stale, busy] of [
   assert.equal(model.interactiveViewUrl, stale ? oldUrl : nextUrl);
 }
 """
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True, text=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)
 
 
 def test_browser_viewer_clears_empty_context_and_ignores_late_responses():
@@ -1787,7 +1787,7 @@ assert.equal(model.address, '');
 assert.equal(model.activeBrowserId, null);
 assert.equal(model.isBusy(), false);
 """
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True, text=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)
 
 
 def test_browser_viewer_uses_tabs_for_session_switching():
@@ -2206,7 +2206,7 @@ check(!isAltTextInput({ key: "d", altKey: true }, "Linux"), "Linux Alt shortcut 
 check(!isAltTextInput({ key: "@", altKey: true, metaKey: true }, "MacIntel"), "Command shortcut became text");
 """
 
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True, text=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)
 
 
 def test_browser_runtime_and_content_helper_expose_annotation_target():
@@ -5295,4 +5295,4 @@ assert.equal(model.runtimeBackend, 'host_required');
 assert.equal(model.runtimeBackendSaving, false);
 assert.deepEqual(notices.at(-1), ['error', 'save failed']);
 """
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True, text=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)

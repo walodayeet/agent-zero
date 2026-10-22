@@ -181,11 +181,12 @@ class BackupService:
         for pattern in include_patterns:
             # If pattern doesn't contain wildcards, it's explicit
             if '*' not in pattern and '?' not in pattern:
+                normalized = pattern.replace(os.sep, "/").lstrip('/')
                 # Remove leading slash for comparison
-                explicit_patterns.add(pattern.lstrip('/'))
+                explicit_patterns.add(normalized)
 
                 # Also add parent directories as explicit (so hidden dirs can be traversed)
-                path_parts = pattern.lstrip('/').split('/')
+                path_parts = normalized.split('/')
                 for i in range(1, len(path_parts)):
                     parent_path = '/'.join(path_parts[:i])
                     explicit_patterns.add(parent_path)
@@ -194,7 +195,7 @@ class BackupService:
 
     def _is_explicitly_included(self, file_path: str, explicit_patterns: set[str]) -> bool:
         """Check if a file/directory is explicitly included in patterns"""
-        relative_path = file_path.lstrip('/')
+        relative_path = file_path.replace(os.sep, "/").lstrip('/')
         return relative_path in explicit_patterns
 
     def _translate_patterns(self, patterns: List[str], backup_metadata: Dict[str, Any]) -> List[str]:
@@ -221,12 +222,13 @@ class BackupService:
         if not backed_up_agent_root:
             return patterns
 
-        # Ensure paths have consistent trailing slash handling
-        backed_up_agent_root = backed_up_agent_root.rstrip('/')
-        current_agent_root = current_agent_root.rstrip('/')
+        # Patterns are "/"-separated; roots may be native Windows paths
+        backed_up_agent_root = backed_up_agent_root.replace(os.sep, "/").rstrip('/')
+        current_agent_root = current_agent_root.replace(os.sep, "/").rstrip('/')
 
         translated_patterns = []
         for pattern in patterns:
+            pattern = pattern.replace(os.sep, "/")
             # Check if the pattern starts with the backed up agent zero root
             if pattern.startswith(backed_up_agent_root + '/') or pattern == backed_up_agent_root:
                 # Replace the backed up root with the current root
@@ -256,7 +258,11 @@ class BackupService:
         patterns_string = self._patterns_to_string(include_patterns, exclude_patterns)
 
         # Parse patterns using pathspec
-        pattern_lines = [line.strip() for line in patterns_string.split('\n') if line.strip() and not line.strip().startswith('#')]
+        pattern_lines = [
+            line.strip().replace(os.sep, "/")
+            for line in patterns_string.split('\n')
+            if line.strip() and not line.strip().startswith('#')
+        ]
 
         if not pattern_lines:
             return []
@@ -303,8 +309,8 @@ class BackupService:
                             if not self._is_explicitly_included(pattern_path, explicit_patterns):
                                 continue
 
-                        # Remove leading slash for pathspec matching
-                        relative_path = pattern_path.lstrip('/')
+                        # Pathspec matches "/"-separated paths; Windows walks yield "\\"
+                        relative_path = pattern_path.replace(os.sep, "/").lstrip('/')
 
                         if spec.match_file(relative_path):
                             try:
@@ -510,13 +516,13 @@ class BackupService:
                         translated_include_patterns = self._translate_patterns(restore_include_patterns, original_backup_metadata)
                         for pattern in translated_include_patterns:
                             # Remove leading slash for pathspec matching
-                            pattern_lines.append(pattern.lstrip('/'))
+                            pattern_lines.append(pattern.replace(os.sep, "/").lstrip('/'))
                     if restore_exclude_patterns:
                         # Translate patterns from backed up system to current system
                         translated_exclude_patterns = self._translate_patterns(restore_exclude_patterns, original_backup_metadata)
                         for pattern in translated_exclude_patterns:
                             # Remove leading slash for pathspec matching
-                            pattern_lines.append(f"!{pattern.lstrip('/')}")
+                            pattern_lines.append(f"!{pattern.replace(os.sep, '/').lstrip('/')}")
 
                     if pattern_lines:
                         from pathspec import PathSpec
@@ -533,7 +539,7 @@ class BackupService:
 
                     # For pattern matching, we need to use the translated path (current system)
                     # so that patterns like "/home/rafael/a0/data/**" can match files correctly
-                    translated_path_for_matching = target_path.lstrip('/')
+                    translated_path_for_matching = target_path.replace(os.sep, "/").lstrip('/')
 
                     # Check if file matches restore patterns
                     if restore_spec and not restore_spec.match_file(translated_path_for_matching):
@@ -669,13 +675,13 @@ class BackupService:
                         translated_include_patterns = self._translate_patterns(restore_include_patterns, original_backup_metadata)
                         for pattern in translated_include_patterns:
                             # Remove leading slash for pathspec matching
-                            pattern_lines.append(pattern.lstrip('/'))
+                            pattern_lines.append(pattern.replace(os.sep, "/").lstrip('/'))
                     if restore_exclude_patterns:
                         # Translate patterns from backed up system to current system
                         translated_exclude_patterns = self._translate_patterns(restore_exclude_patterns, original_backup_metadata)
                         for pattern in translated_exclude_patterns:
                             # Remove leading slash for pathspec matching
-                            pattern_lines.append(f"!{pattern.lstrip('/')}")
+                            pattern_lines.append(f"!{pattern.replace(os.sep, '/').lstrip('/')}")
 
                     if pattern_lines:
                         from pathspec import PathSpec
@@ -692,7 +698,7 @@ class BackupService:
 
                     # For pattern matching, we need to use the translated path (current system)
                     # so that patterns like "/home/rafael/a0/data/**" can match files correctly
-                    translated_path_for_matching = target_path.lstrip('/')
+                    translated_path_for_matching = target_path.replace(os.sep, "/").lstrip('/')
 
                     # Check if file matches restore patterns
                     if restore_spec and not restore_spec.match_file(translated_path_for_matching):
@@ -794,9 +800,9 @@ class BackupService:
         if not backed_up_agent_root:
             return "/" + archive_path.lstrip('/')
 
-        # Ensure paths have consistent trailing slash handling
-        backed_up_agent_root = backed_up_agent_root.rstrip('/')
-        current_agent_root = current_agent_root.rstrip('/')
+        # Patterns are "/"-separated; roots may be native Windows paths
+        backed_up_agent_root = backed_up_agent_root.replace(os.sep, "/").rstrip('/')
+        current_agent_root = current_agent_root.replace(os.sep, "/").rstrip('/')
 
         # Convert archive path to absolute path (add leading slash if missing)
         if not archive_path.startswith('/'):

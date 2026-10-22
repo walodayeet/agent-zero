@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import os
 import subprocess
 
 import pytest
@@ -51,6 +52,7 @@ def test_runtime_apt_propagates_source_write_errors(tmp_path, monkeypatch):
 
 
 @pytest.mark.parametrize("arch", ["amd64", "arm64"])
+@pytest.mark.skipif(os.name != "posix", reason="Linux package simulation")
 def test_desktop_install_script_uses_compatible_architecture_packages(tmp_path, arch):
     root = Path(__file__).resolve().parents[1]
     script = (root / "docker/run/fs/ins/install_additional.sh").read_text()

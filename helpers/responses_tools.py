@@ -372,7 +372,7 @@ def _schema_for_tool(agent: Any, tool_name: str, prompt: str) -> dict[str, Any]:
     for path in subagents.get_paths(agent, "tools", tool_name + ".py"):
         if not files.exists(path):
             continue
-        relative = os.path.relpath(os.path.realpath(path), files.get_abs_path())
+        relative = os.path.relpath(os.path.realpath(path), files.get_abs_path()).replace(os.sep, "/")
         properties = BUNDLED_TOOL_PARAMETERS.get(relative)
         if properties is not None:
             return {

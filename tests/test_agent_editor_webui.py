@@ -344,7 +344,7 @@ element.setAttribute("title", "");
 ensureBootstrapTooltip(element);
 if (instance || element.hasAttribute("data-bs-original-title") || element.hasAttribute("data-bs-tooltip-initialized")) throw new Error("cleared title left a stale tooltip");
 """
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)
 
 
 @pytest.mark.skipif(not shutil.which("node"), reason="node is required")
@@ -848,7 +848,7 @@ if (store.view !== "manage" || store.mode !== "easy" || store.draft !== null || 
         module_source.encode("utf-8")
     ).decode("ascii")
     subprocess.run(
-        ["node", "--input-type=module", "-e", f"await import('{module_url}')"],
+        ["node", "--input-type=module"], input=f"await import('{module_url}')",
         check=True,
         text=True,
     )
@@ -896,7 +896,7 @@ if (pending.length !== requestCount) throw new Error("cached profile catalog une
         module_source.encode("utf-8")
     ).decode("ascii")
     subprocess.run(
-        ["node", "--input-type=module", "-e", f"await import('{module_url}')"],
+        ["node", "--input-type=module"], input=f"await import('{module_url}')",
         check=True,
         text=True,
     )

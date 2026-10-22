@@ -105,7 +105,7 @@ class _FakeVectorDB:
 
 def test_fetch_file_detects_mimetype_and_reads_once(tmp_path):
     document = tmp_path / "notes.txt"
-    document.write_text("hello\nworld\n", encoding="utf-8")
+    document.write_text("hello\nworld\n", encoding="utf-8", newline="\n")
 
     fetched = run_async(fetch_public_resource(str(document), {}))
 

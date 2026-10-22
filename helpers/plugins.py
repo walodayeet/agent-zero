@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 import re, json, glob
 import time
 from pathlib import Path
@@ -765,9 +766,11 @@ def find_plugin_assets(
             return s[start:] if end == -1 else s[start:end]
 
         for matched in matched_paths:
-            inferred_proj = _after(matched, "/projects/") if need_proj else proj
+            # Scope markers are "/"-separated even when the walk yields "\\".
+            matched_key = matched.replace(os.sep, "/")
+            inferred_proj = _after(matched_key, "/projects/") if need_proj else proj
             inferred_prof = (
-                _after(matched, "/agents/", last=True) if need_prof else profile
+                _after(matched_key, "/agents/", last=True) if need_prof else profile
             )
             results.append(
                 {

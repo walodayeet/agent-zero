@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 import stat
 import sys
 from pathlib import Path
@@ -58,7 +59,8 @@ def test_self_update_runtime_sync_replaces_stale_manager(tmp_path):
     assert result["ok"] is True
     assert result["updated"] is True
     assert target.read_text(encoding="utf-8") == SAFE_SOURCE
-    assert (target.stat().st_mode & 0o777) == 0o600
+    if os.name == "posix":
+        assert (target.stat().st_mode & 0o777) == 0o600
     backup = target.with_name(f"{target.name}{migration.BACKUP_SUFFIX}")
     assert backup.read_text(encoding="utf-8") == stale
 

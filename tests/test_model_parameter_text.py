@@ -57,4 +57,4 @@ for (const slot of ['chat', 'vision', 'utility', 'embedding']) {
   assert.deepEqual(saved[0][slot].kwargs, {param: {enabled: true}});
 }
 '''.replace("MODULE_URL", repr(module_url))
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)

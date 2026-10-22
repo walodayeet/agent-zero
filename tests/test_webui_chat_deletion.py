@@ -245,7 +245,7 @@ assert(model.selected === "b", "rollback must not override the fallback or a lat
 """
 
     subprocess.run(
-        ["node", "--input-type=module", "-e", script],
+        ["node", "--input-type=module"], input=script,
         check=True,
         text=True,
     )
@@ -283,4 +283,4 @@ for (const phase of ['extension', 'messages']) {{
   assert.equal(sandbox.context, 'new');
 }}
 """
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True, capture_output=True, text=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, capture_output=True, text=True)

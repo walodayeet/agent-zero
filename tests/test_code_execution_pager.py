@@ -5,8 +5,11 @@ code execution tool: without user input they block forever and spin at 100% CPU.
 """
 
 import asyncio
+import os
 import importlib
 from types import SimpleNamespace
+
+import pytest
 
 from plugins._code_execution.helpers import shell_local, shell_ssh
 from plugins._code_execution.helpers.tty_session import TTYSession
@@ -79,6 +82,7 @@ def test_tty_close_kills_term_resistant_process():
     asyncio.run(run())
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX tty shell semantics")
 def test_tty_reports_strict_mode_shell_exit():
     async def run():
         session = TTYSession("/bin/bash --noprofile --norc -i")

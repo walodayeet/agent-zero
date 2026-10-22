@@ -1,9 +1,14 @@
 import re
-import resource
+import sys
 import subprocess
 from pathlib import Path
 
 import pytest
+
+if sys.platform != "linux":
+    pytest.skip("Docker initialize script is Linux-only", allow_module_level=True)
+
+import resource
 
 
 REPO_ROOT = Path(__file__).resolve().parents[1]

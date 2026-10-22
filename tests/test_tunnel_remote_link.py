@@ -353,10 +353,12 @@ def test_tailscale_installs_runtime_binaries_from_static_archive(
 
     installed = Path(modules.tailscale.install_tailscale())
 
-    assert installed == tmp_path / "bin" / "tailscale"
-    assert (tmp_path / "bin" / "tailscaled").exists()
-    assert os.access(tmp_path / "bin" / "tailscale", os.X_OK)
-    assert os.access(tmp_path / "bin" / "tailscaled", os.X_OK)
+    tailscale_name = modules.cli.executable_name("tailscale")
+    tailscaled_name = modules.cli.executable_name("tailscaled")
+    assert installed == tmp_path / "bin" / tailscale_name
+    assert (tmp_path / "bin" / tailscaled_name).exists()
+    assert os.access(tmp_path / "bin" / tailscale_name, os.X_OK)
+    assert os.access(tmp_path / "bin" / tailscaled_name, os.X_OK)
     assert not (tmp_path / "bin" / "tailscale_1.84.0_amd64.tgz").exists()
 
 
@@ -393,8 +395,10 @@ def test_tailscale_installer_downloads_static_pair_when_system_daemon_is_missing
 
     monkeypatch.setattr(modules.cli, "download_file", fake_download)
 
-    assert modules.tailscale.install_tailscale() == str(tmp_path / "bin" / "tailscale")
-    assert (tmp_path / "bin" / "tailscaled").exists()
+    assert modules.tailscale.install_tailscale() == str(
+        tmp_path / "bin" / modules.cli.executable_name("tailscale")
+    )
+    assert (tmp_path / "bin" / modules.cli.executable_name("tailscaled")).exists()
 
 
 def test_tailscale_static_package_url_is_discovered_from_official_listing(
@@ -445,9 +449,10 @@ def test_tar_extraction_sanitizes_member_paths(
         {"tailscale"},
     )
 
-    assert extracted == {"tailscale": destination / "tailscale"}
-    assert (destination / "tailscale").read_text(encoding="utf-8") == "binary"
-    assert not (tmp_path / "tailscale").exists()
+    extracted_name = modules.cli.executable_name("tailscale")
+    assert extracted == {"tailscale": destination / extracted_name}
+    assert (destination / extracted_name).read_text(encoding="utf-8") == "binary"
+    assert not (tmp_path / extracted_name).exists()
 
 
 @pytest.mark.parametrize(
@@ -488,8 +493,8 @@ def test_tailscale_preflight_starts_managed_daemon_then_runs_up_with_socket(
     socket_path = runtime_dir / "tailscaled.sock"
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
-    tailscale = bin_dir / "tailscale"
-    tailscaled = bin_dir / "tailscaled"
+    tailscale = bin_dir / modules.cli.executable_name("tailscale")
+    tailscaled = bin_dir / modules.cli.executable_name("tailscaled")
     tailscale.write_text("#!/bin/sh\n", encoding="utf-8")
     tailscaled.write_text("#!/bin/sh\n", encoding="utf-8")
     monkeypatch.setattr(modules.tailscale, "TAILSCALE_RUNTIME_DIR", runtime_dir)

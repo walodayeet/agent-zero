@@ -127,9 +127,11 @@ def extensible(func):
         if not module_parts or not qual_parts:
             return None
 
-        base_path = os.path.join("_functions", *module_parts, *qual_parts)
-        start_point = os.path.join(base_path, "start")
-        end_point = os.path.join(base_path, "end")
+        # Extension points are identifiers as well as relative paths: keep them
+        # "/"-separated on every platform so consumers can match them by string.
+        base_path = "/".join(["_functions", *module_parts, *qual_parts])
+        start_point = f"{base_path}/start"
+        end_point = f"{base_path}/end"
 
         agent = _get_agent(args, kwargs)
 

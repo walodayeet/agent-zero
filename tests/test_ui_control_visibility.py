@@ -235,4 +235,4 @@ assert.equal(observer.disconnected, true);
 assert.equal(scrolled.top, 688);
 assert.equal(scrolled.behavior, 'instant');
 """
-    subprocess.run(["node", "-e", script], cwd=ROOT, check=True, text=True)
+    subprocess.run(["node"], input=script, cwd=ROOT, check=True, text=True)

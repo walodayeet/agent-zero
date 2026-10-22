@@ -288,11 +288,19 @@ async def export_transcript(context):
         return
     directory = get_bridge_media_dir()
     os.makedirs(directory, exist_ok=True)
-    with tempfile.NamedTemporaryFile(mode='w', suffix='.txt', dir=directory, encoding='utf-8') as file:
-        file.write(text)
-        file.flush()
+    # Close the file before sending: on Windows an open write handle blocks the
+    # read/upload side, and the temporary file must be removable afterwards.
+    descriptor, transcript_path = tempfile.mkstemp(suffix='.txt', dir=directory)
+    try:
+        with os.fdopen(descriptor, 'w', encoding='utf-8') as file:
+            file.write(text)
         config = plugins.get_plugin_config('_whatsapp_integration') or {}
         result = await wa_client.send_media(bridge_manager.get_bridge_url(int(config.get('bridge_port', 3100))),
-            context.data['wa_chat_id'], file.name, media_type='document', file_name='transcript.txt')
+            context.data['wa_chat_id'], transcript_path, media_type='document', file_name='transcript.txt')
         if result.get('error'):
             raise RuntimeError(result['error'])
+    finally:
+        try:
+            os.unlink(transcript_path)
+        except FileNotFoundError:
+            pass

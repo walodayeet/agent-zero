@@ -47,7 +47,7 @@ const protectedCode =
   '```tex\n' + String.raw`\[also_not_math\]` + '\n```';
 assertEqual(convertLatexDelimiters(protectedCode), protectedCode);
 """
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)
 
 
 def test_katex_renderer_uses_text_content_and_display_metadata():

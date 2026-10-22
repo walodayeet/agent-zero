@@ -3,6 +3,7 @@ import contextlib
 import hashlib
 import io
 import json
+import os
 import zipfile
 from pathlib import Path
 
@@ -99,7 +100,8 @@ def test_secret_roundtrip_and_private_storage(storage):
     _, item, _, path = storage
     assert "password" not in item
     assert item["savedSecrets"] == {"password":True}
-    assert (path / "connections.json").stat().st_mode & 0o777 == 0o600
+    if os.name == "posix":
+        assert (path / "connections.json").stat().st_mode & 0o777 == 0o600
     service.save_connection(item)
     assert service.get_connection("test", item["id"])[1]["password"] == "private-test-only"
     assert "private-test-only" not in json.dumps(service.listing_config())

@@ -416,4 +416,4 @@ def test_webui_beautifier_formats_objects_and_arrays() -> None:
         + "if (beautifyJsonForDisplay('{broken') !== '{broken') throw new Error('invalid JSON changed');\n"
     )
 
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True, text=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)

@@ -219,7 +219,7 @@ assert.deepEqual(notificationConsumer.notifications.map(item => [item.id, item.r
 assert.deepEqual(expectedToast, ['A completed']);
 assert.equal(notificationConsumer.notifications.find(item => item.id === 'job-a').read, false);
 """
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True, timeout=15)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True, timeout=15)
 
 
 def test_message_layout_yield_finishes_when_browser_stops_animation_frames() -> None:
@@ -247,7 +247,7 @@ await foreground;
 assert.equal(frame, null);
 assert.equal(timer, null);
 """
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True, timeout=15)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True, timeout=15)
 
 
 def test_partial_snapshot_retains_sidebar_collections_and_extension_shape() -> None:

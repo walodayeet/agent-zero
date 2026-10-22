@@ -181,10 +181,9 @@ async def test_create_backup_uses_unlimited_pattern_scan(tmp_path, monkeypatch):
     with zipfile.ZipFile(zip_path) as archive:
         metadata = json.loads(archive.read("metadata.json").decode("utf-8"))
         assert metadata["total_files"] == 3
-        assert (
-            f"{service.agent_zero_root.rstrip('/').lstrip('/')}/usr/file-2.txt"
-            in archive.namelist()
-        )
+        root = Path(service.agent_zero_root)
+        expected = root.relative_to(Path(root.anchor)).as_posix() + "/usr/file-2.txt"
+        assert expected in archive.namelist()
 
 
 @pytest.mark.asyncio

@@ -711,11 +711,29 @@ def display_path(path: str) -> str:
     return normalize_a0_path(str(path))
 
 
+_USR_REAL_CACHE: dict[str, str] = {}
+
+
+def _real_usr_dir() -> str:
+    usr = get_abs_path(USER_DIR)
+    cached = _USR_REAL_CACHE.get(usr)
+    if cached is None:
+        cached = os.path.realpath(usr)
+        _USR_REAL_CACHE[usr] = cached
+    return cached
+
+
 def normalize_a0_path(path: str):
     "Convert absolute paths into /a0/... paths"
     if is_in_base_dir(path):
         deabs = deabsolute_path(path)
         return "/a0/" + deabs
+    # `usr` can be a junction/symlink outside the checkout (bare-metal data dir),
+    # so paths resolved through it no longer sit under the base dir.
+    usr_real = _real_usr_dir()
+    if is_in_dir(path, usr_real):
+        rel = os.path.relpath(os.path.abspath(path), usr_real)
+        return "/a0/" + USER_DIR if rel == "." else f"/a0/{USER_DIR}/" + rel.replace(os.sep, "/")
     return path
 
 

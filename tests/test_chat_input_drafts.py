@@ -99,4 +99,4 @@ assert(editor.style.height === "auto", "repeated sizing froze the composer heigh
 model.unmountEditor(editor);
 """
 
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True, text=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)

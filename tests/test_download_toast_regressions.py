@@ -229,4 +229,4 @@ for (const html of [
   if (convertPathsToLinks(html) !== html) throw new Error(`Changed protected HTML: ${{html}}`);
 }}
 """
-    subprocess.run(["node", "-e", script], check=True, text=True)
+    subprocess.run(["node"], input=script, check=True, text=True)

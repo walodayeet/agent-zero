@@ -5,6 +5,7 @@ from __future__ import annotations
 import asyncio
 import mimetypes
 import os
+import re
 import tempfile
 from contextlib import contextmanager
 from dataclasses import dataclass
@@ -69,6 +70,10 @@ ProtocolHandler = Callable[
 _PROTOCOL_HANDLERS: dict[str, ProtocolHandler] = {}
 
 
+def _is_windows_path(uri: str) -> bool:
+    return bool(re.match(r"^[A-Za-z]:[\\/]", uri)) or uri.startswith("\\\\")
+
+
 def register_protocol_handler(scheme: str, handler: ProtocolHandler) -> None:
     """Register or replace a fetch handler for a URI scheme."""
     _PROTOCOL_HANDLERS[scheme.lower()] = handler
@@ -83,6 +88,9 @@ async def fetch_public_resource(
     config = config or {}
     parsed = urlparse(uri)
     scheme = (parsed.scheme or "file").lower()
+    if _is_windows_path(uri):
+        # "C:\\docs\\a.pdf" parses as the one-letter scheme "c".
+        scheme = "file"
     handler = _PROTOCOL_HANDLERS.get(scheme)
     if not handler:
         raise ValueError(f"Unsupported document scheme: {scheme}")

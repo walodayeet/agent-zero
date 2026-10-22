@@ -54,7 +54,7 @@ for (const type of ["code_exe", "text_editor", "custom_plugin_step"]) {{
   assert.equal(completed[2].group, null, "post-response utilities must stay separate");
 }}
 """
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True, text=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)
 
 
 def test_message_window_keeps_tail_and_pages_bidirectionally():
@@ -226,7 +226,7 @@ assert(windowed.end === 1000, "an unfollowed live append must not move the visib
 assert(windowed.newerCount === 1, "an unfollowed live append must remain available as a newer page");
 """
     subprocess.run(
-        ["node", "--input-type=module", "-e", script],
+        ["node", "--input-type=module"], input=script,
         check=True,
         text=True,
     )
@@ -353,7 +353,7 @@ assert(
 );
 """
     subprocess.run(
-        ["node", "--input-type=module", "-e", script],
+        ["node", "--input-type=module"], input=script,
         check=True,
         text=True,
     )
@@ -495,7 +495,7 @@ assert(
 );
 """
     subprocess.run(
-        ["node", "--input-type=module", "-e", script],
+        ["node", "--input-type=module"], input=script,
         check=True,
         text=True,
     )
@@ -539,7 +539,7 @@ assert(!("scrollerTimeout" in element.dataset), "timeout state must be cleared")
 assert(!("scrollingTo" in element.dataset), "smooth-scroll state must be cleared");
 """
     subprocess.run(
-        ["node", "--input-type=module", "-e", script],
+        ["node", "--input-type=module"], input=script,
         check=True,
         text=True,
     )

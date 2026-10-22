@@ -64,4 +64,4 @@ selected = 'probe2';
 await globalThis.openModal('/plugins/_model_config/webui/main.html');
 assert.deepEqual(shown(), ['Default,probe,probe2', 'probe2']);
 '''.replace("STORE_URL", repr(store_url)).replace("HOOK_URL", repr(hook_url))
-    subprocess.run(["node", "--input-type=module", "-e", script], check=True)
+    subprocess.run(["node", "--input-type=module"], input=script, check=True, text=True)

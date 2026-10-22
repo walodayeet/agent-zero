@@ -848,9 +848,10 @@ def test_self_update_manager_usr_backup_skips_broken_symlinks(tmp_path):
     assert "usr/workdir/reachy-mini-mcp/.venv/bin/python" not in names
 
 
+@pytest.mark.skipif(not hasattr(__import__("socket"), "AF_UNIX"), reason="AF_UNIX sockets are POSIX-only")
 def test_self_update_manager_usr_backup_skips_runtime_sockets():
     manager = load_self_update_manager()
-    with tempfile.TemporaryDirectory(prefix="a0su-", dir="/tmp") as temp_root:
+    with tempfile.TemporaryDirectory(prefix="a0su-") as temp_root:
         repo_dir = Path(temp_root) / "repo"
         usr_dir = repo_dir / "usr"
         gnupg_dir = (
@@ -922,7 +923,8 @@ def test_self_update_manager_usr_backup_skips_time_travel_history(tmp_path):
     assert "usr/settings.json" in names
     assert "usr/.time_travel/workspaces/demo/repo.git/objects.pack" not in names
     assert any(
-        "Skipping Time Travel history during usr backup: usr/.time_travel" in message
+        "Skipping Time Travel history during usr backup: usr/.time_travel"
+        in message.replace("\\", "/")
         for message in messages
     )
 
@@ -969,14 +971,16 @@ def test_self_update_manager_usr_backup_skips_transient_desktop_ssh_agent_dir(tm
     )
     assert any(
         "Skipping transient usr backup directory: "
-        "usr/plugins/_desktop/profiles/agent-zero-desktop/.ssh/agent" in message
+        "usr/plugins/_desktop/profiles/agent-zero-desktop/.ssh/agent"
+        in message.replace("\\", "/")
         for message in messages
     )
 
 
+@pytest.mark.skipif(not hasattr(__import__("socket"), "AF_UNIX"), reason="AF_UNIX sockets are POSIX-only")
 def test_self_update_manager_cleans_transient_desktop_agent_state():
     manager = load_self_update_manager()
-    with tempfile.TemporaryDirectory(prefix="a0su-", dir="/tmp") as temp_root:
+    with tempfile.TemporaryDirectory(prefix="a0su-") as temp_root:
         repo_dir = Path(temp_root) / "repo"
         current_profile = (
             repo_dir
