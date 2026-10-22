@@ -35,6 +35,7 @@
 ## Key Concepts
 
 - Important called helpers/classes observed in the source: `self.relative_path`, `self.session_request`, `self.query`, `virtual_desktop.proxy_for_token`, `WebSocket`, `self.upstream_target`, `WSConnection`, `writer.write`, `rest.partition`, `unquote`, `quote`, `http.client.HTTPConnection`, `query_string.decode`, `urlsplit`, `location.startswith`, `path.startswith`, `parse_qs`, `login.get_credentials_hash`, `SecureCookieSessionInterface.get_signing_serializer`, `dict.get.decode`.
+- `install_route_hooks()` replaces `UiServerRuntime.build_asgi_app` with a version that adds the `/desktop` gateway mount. That replacement must reuse `helpers.ui_server.mcp_asgi_app`, `a2a_asgi_app`, `LazyAsgiApp`, and `gzip_asgi` so `/mcp`, `/a2a`, and `/desktop` keep the base builder's lazy loading and compression behavior instead of importing the proxies eagerly or rebuilding the ASGI stack without gzip.
 - Keep request/response, tool, or helper semantics documented here at the same time as source changes.
 
 ## Work Guidance

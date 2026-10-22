@@ -17,6 +17,7 @@ from langchain_community.vectorstores.utils import (
 )
 from langchain_core.embeddings import Embeddings
 
+import asyncio
 import os, json, hashlib, re
 
 import numpy as np
@@ -36,6 +37,21 @@ from simpleeval import simple_eval
 
 # Raise the log level so WARNING messages aren't shown
 logging.getLogger("langchain_core.vectorstores.base").setLevel(logging.ERROR)
+
+# Probing the embedding model for its dimension is a real model/API round-trip;
+# cache per embedding model namespace instead of per memory subdir / DB load.
+_EMBEDDING_DIMENSIONS: dict[str, int] = {}
+
+
+def _embedding_dimension(embedder: Any) -> int:
+    # CacheBackedEmbeddings stores the wrapped model, not the model name/namespace.
+    model = getattr(embedder, "underlying_embeddings", embedder)
+    namespace = str(getattr(model, "model_name", None) or "default")
+    dimension = _EMBEDDING_DIMENSIONS.get(namespace)
+    if dimension is None:
+        dimension = len(embedder.embed_query("example"))
+        _EMBEDDING_DIMENSIONS[namespace] = dimension
+    return dimension
 
 
 class MyFaiss(FAISS):
@@ -211,7 +227,7 @@ class Memory:
 
         # DB not loaded, create one
         if not db:
-            index = faiss.IndexFlatIP(len(embedder.embed_query("example")))
+            index = faiss.IndexFlatIP(_embedding_dimension(embedder))
 
             db = MyFaiss(
                 embedding_function=embedder,
@@ -396,10 +412,19 @@ class Memory:
         removed = []
         removed_ids: set[str] = set()
 
+        # The query embedding is invariant across the deletion loop; compute it once
+        # instead of re-embedding for every batch. `Memory` exposes it via embed_query
+        # (the DB's embedding function), not as `self.embeddings`.
+        query_embedding = None
+        try:
+            query_embedding = await self.embed_query(query)
+        except Exception:
+            query_embedding = None
+
         while True:
             # Perform similarity search with score
             docs = await self.search_similarity_threshold(
-                query, limit=k, threshold=threshold, filter=filter
+                query, limit=k, threshold=threshold, filter=filter, embedding=query_embedding
             )
             removed += docs
 

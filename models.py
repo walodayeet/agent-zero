@@ -17,10 +17,6 @@ from typing import (
     TYPE_CHECKING,
 )
 
-from litellm import embedding
-import litellm
-import openai
-
 from helpers import dotenv
 from helpers import settings, images
 from helpers.dotenv import load_dotenv
@@ -48,6 +44,44 @@ from pydantic import ConfigDict
 
 if TYPE_CHECKING:
     from sentence_transformers import SentenceTransformer
+
+
+_LITELLM_MODULE: Any = None
+
+
+def _litellm() -> Any:
+    """Import LiteLLM on first model call.
+
+    The LiteLLM import is ~2s of the framework's ~3.7s import cost and is not
+    needed before the first chat/embedding request, so it stays lazy.
+    """
+    global _LITELLM_MODULE
+    if _LITELLM_MODULE is None:
+        import litellm as _module
+
+        _LITELLM_MODULE = _module
+    return _LITELLM_MODULE
+
+
+def embedding(*args: Any, **kwargs: Any) -> Any:
+    """Lazy binding of litellm.embedding; kept as a module attribute for callers/tests."""
+    return _litellm().embedding(*args, **kwargs)
+
+
+class _LazyLitellmModule:
+    """Module proxy so `models.litellm.<attr>` keeps working while the import stays lazy."""
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(_litellm(), name)
+
+    def __setattr__(self, name: str, value: Any) -> None:
+        setattr(_litellm(), name, value)
+
+    def __delattr__(self, name: str) -> None:
+        delattr(_litellm(), name)
+
+
+litellm: Any = _LazyLitellmModule()
 
 
 DEFAULT_LITELLM_GLOBAL_KWARGS: dict[str, Any] = {
@@ -100,7 +134,6 @@ def get_litellm_global_kwargs() -> dict[str, Any]:
 # keep provider logging quiet in normal operation
 def turn_off_logging():
     os.environ["LITELLM_LOG"] = "ERROR"  # only errors
-    litellm.suppress_debug_info = True
     # Silence **all** LiteLLM sub-loggers (utils, cost_calculator…)
     for name in logging.Logger.manager.loggerDict:
         if name.lower().startswith("litellm"):
@@ -108,11 +141,13 @@ def turn_off_logging():
 
 
 def set_litellm_params():
+    module = _litellm()
+    module.suppress_debug_info = True
     global_kwargs = get_litellm_global_kwargs()
     for key, value in global_kwargs.items():
         if key not in LITELLM_MODULE_GLOBAL_KEYS:
             continue
-        setattr(litellm, key, value)
+        setattr(module, key, value)
     return global_kwargs
 
 
@@ -131,7 +166,8 @@ def _merge_litellm_call_kwargs(*overrides: dict[str, Any] | None) -> dict[str, A
 
 # init
 load_dotenv()
-configure_litellm()
+# LiteLLM itself is imported on first use; only its log routing is set up eagerly.
+turn_off_logging()
 
 
 class ModelType(Enum):
@@ -324,6 +360,8 @@ def _is_transient_litellm_error(exc: Exception) -> bool:
         return False
 
     # Fallback to exception classes mapped by LiteLLM/OpenAI
+    import openai  # imported on the error path; the SDK is ~0.4s of startup
+
     transient_types = (
         getattr(openai, "APITimeoutError", Exception),
         getattr(openai, "APIConnectionError", Exception),

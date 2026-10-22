@@ -32,6 +32,11 @@ stored in `.a0-data`. Overrides: `--data-dir PATH` / `-DataDir`, `A0_DATA_DIR`,
 `A0_INSTANCE`, `--non-interactive`, `A0_NO_ONBOARDING=1`. Repo `usr` becomes a
 symlink to the chosen directory; migration is installer-only and copy-verified.
 
+Startup cost: `A0_PRELOAD_WAIT` bounds how long startup blocks on the embedding
+warm-up (default 10s; the bare-metal launchers export 0). `A0_PRELOAD=0` skips the
+warm-up itself — the local embedding model then loads on first use (~6s once per
+process, ~1.7GB RSS saved while it is unused). Both launchers default to 0/0.
+
 ## Starting and installing
 ```bash
 ./run-baremetal.sh                       # manual start (A0_HOST/A0_PORT/A0_DATA_DIR/SEARXNG_URL)

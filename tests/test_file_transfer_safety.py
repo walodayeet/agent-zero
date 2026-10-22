@@ -11,6 +11,14 @@ from helpers.file_browser import FileBrowser
 from helpers.file_archives import create_selected_zip, extract_archive
 
 
+@pytest.fixture(autouse=True)
+def _container_file_browser_root(monkeypatch):
+    """Upstream contract: the File Browser spans `/`; bare-metal root containment is separate."""
+    from helpers import runtime
+
+    monkeypatch.setattr(runtime, "is_local_runtime", lambda: False)
+
+
 def test_atomic_write_failure_preserves_bytes_and_mode(tmp_path):
     destination = tmp_path / "script"
     destination.write_bytes(b"keep"); destination.chmod(0o751)

@@ -8,19 +8,51 @@ import inspect
 import json
 from typing import Any, AsyncIterator, Iterator, Optional
 
-from litellm import (
-    ContentPolicyViolationError,
-    acompletion,
-    adelete_responses,
-    aresponses,
-    completion,
-    delete_responses,
-    responses,
-)
-
 from helpers import images, responses_history
 from helpers.llm_result import LLMResult
 from helpers.responses_tools import project_system_prompt
+
+
+_LITELLM_MODULE: Any = None
+
+
+def _litellm() -> Any:
+    """Import LiteLLM on first transport use.
+
+    Importing litellm dominates cold start (~2s of a ~3.7s framework import), so
+    the module is resolved lazily instead of at import time.
+    """
+    global _LITELLM_MODULE
+    if _LITELLM_MODULE is None:
+        import litellm as _module
+
+        _LITELLM_MODULE = _module
+    return _LITELLM_MODULE
+
+
+# Thin lazy bindings: same call shapes the module used to import eagerly.
+def completion(*args: Any, **kwargs: Any) -> Any:
+    return _litellm().completion(*args, **kwargs)
+
+
+def responses(*args: Any, **kwargs: Any) -> Any:
+    return _litellm().responses(*args, **kwargs)
+
+
+async def acompletion(*args: Any, **kwargs: Any) -> Any:
+    return await _litellm().acompletion(*args, **kwargs)
+
+
+async def aresponses(*args: Any, **kwargs: Any) -> Any:
+    return await _litellm().aresponses(*args, **kwargs)
+
+
+def delete_responses(*args: Any, **kwargs: Any) -> Any:
+    return _litellm().delete_responses(*args, **kwargs)
+
+
+async def adelete_responses(*args: Any, **kwargs: Any) -> Any:
+    return await _litellm().adelete_responses(*args, **kwargs)
 
 
 ChatChunk = dict[str, str]
@@ -585,7 +617,7 @@ class ChatCompletionsTransport:
         choice = _first_choice(chunk)
         finish_reason = _get_value(choice, "finish_reason")
         if finish_reason in {"content_filter", "refusal"}:
-            raise ContentPolicyViolationError(
+            raise _litellm().ContentPolicyViolationError(
                 message=f"Model provider refused the response (finish_reason={finish_reason}). "
                 "Review the request and provider restrictions before retrying.",
                 model=str(_get_value(chunk, "model") or ""),

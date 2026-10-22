@@ -56,6 +56,7 @@ def test_local_transfer_limit_rejects_before_overwrite(tmp_path, monkeypatch):
 
     from helpers import runtime
     monkeypatch.setattr(runtime, "is_development", lambda: False)
+    monkeypatch.setattr(runtime, "is_local_runtime", lambda: False)
     monkeypatch.setattr(FileBrowser, "max_file_bytes", classmethod(lambda cls: 4))
     browser = FileBrowser()
     target = tmp_path / "backup.zip"

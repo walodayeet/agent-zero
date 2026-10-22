@@ -68,6 +68,9 @@ def initialize_job_loop():
 
 @extension.extensible
 def initialize_preload():
+    if not runtime.preload_enabled():
+        PrintStyle().print("Embedding preload disabled (A0_PRELOAD=0); loading on first use.")
+        return None
     import preload
     return defer.DeferredTask().start_task(preload.preload)
 

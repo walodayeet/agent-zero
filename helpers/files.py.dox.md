@@ -33,7 +33,8 @@
 - `find_file_in_dirs(_filename: str, _directories: list[str])`: This function searches for a filename in a list of directories in order.
 - `get_unique_filenames_in_dirs(dir_paths: list[str], pattern: str=..., type: Literal['file', 'dir', 'any']=...)`
 - `find_existing_paths_by_pattern(pattern: str)`
-- `remove_code_fences(text, language: str | None=...)`: Remove every code fence, or only fences for one language while preserving their contents.
+- `_read_cached_text(path: str, encoding: str) -> str`: mtime/size-keyed raw text cache used by `read_prompt_file`; callers keep per-call placeholder/include expansion.
+- `remove_code_fences(text, language: str | None=...)`: Remove every code fence, or only fences for one language while preserving their contents. With a language, it also drops an orphan opening marker left when a prompt budget cut the block before its closing marker; callers should strip per section so fences from different sections are never paired.
 - `is_full_json_template(text)`
 - `write_file(relative_path: str, content: str, encoding: str=...)`
 - `delete_file(relative_path: str)`
@@ -48,6 +49,9 @@
 
 ## Runtime Contracts
 
+- `remove_code_fences(text, language=...)` strips that language's fences with a line-based state machine: an unterminated opening fence is dropped without consuming a later section's closing fence, which a regex pairing scheme did.
+- `read_prompt_file` returns the cached raw text unchanged when it contains no `{{ ... }}` markers, because conditions, placeholders and includes all use that syntax; files with markers still run the full per-call expansion.
+- `read_prompt_file` reuses the raw file body from `_PROMPT_TEXT_CACHE` keyed by (path, mtime_ns, size, encoding); conditions, placeholders and includes are still evaluated per call, so rendered output never comes from cache.
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Observed side-effect areas: filesystem reads, filesystem writes, filesystem deletion, subprocess/runtime control, plugin state, settings/state persistence, secret handling.

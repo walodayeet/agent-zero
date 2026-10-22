@@ -37,6 +37,8 @@
 
 ## Runtime Contracts
 
+- `subagents.begin_path_scope()`/`end_path_scope()` bound a per-prompt-build memo (ContextVar) for `get_paths()`; the `agent/Agent/get_system_prompt` start/end extension hooks drive it. The global `PATHS_CACHE_AREA` remains disabled, so nothing survives a build or leaks between tasks/agents.
+- `get_all_agents_list()` is cached against a per-root signature of agent folders and their definition files (`agent.json`/`agent.yaml`/`agent.yml`/`_context.md`), so edits/additions/removals invalidate it; results are returned as copies.
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Observed side-effect areas: filesystem reads, filesystem writes, filesystem deletion, plugin state, settings/state persistence.

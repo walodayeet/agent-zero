@@ -10,6 +10,9 @@ $hostAddr = if ($env:A0_HOST) { $env:A0_HOST } else { "127.0.0.1" }
 $env:A0_LOCAL_RUNTIME = if ($env:A0_LOCAL_RUNTIME) { $env:A0_LOCAL_RUNTIME } else { "true" }
 $env:PATH = "$PSScriptRoot\.venv\Scripts;$env:PATH"
 $env:PLAYWRIGHT_BROWSERS_PATH = if ($env:PLAYWRIGHT_BROWSERS_PATH) { $env:PLAYWRIGHT_BROWSERS_PATH } else { "$PSScriptRoot\tmp\playwright" }
+# Fast start: never block HTTP on the embedding warm-up, skip it unless A0_PRELOAD=1.
+$env:A0_PRELOAD_WAIT = if ($env:A0_PRELOAD_WAIT) { $env:A0_PRELOAD_WAIT } else { "0" }
+$env:A0_PRELOAD = if ($env:A0_PRELOAD) { $env:A0_PRELOAD } else { "0" }
 
 # Local gateways must bypass any proxy.
 $loopbackNoProxy = "localhost,127.0.0.1,::1,host.docker.internal"

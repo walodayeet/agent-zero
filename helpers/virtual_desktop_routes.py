@@ -410,16 +410,21 @@ def install_route_hooks() -> None:
         from starlette.routing import Mount
         from uvicorn.middleware.wsgi import WSGIMiddleware
 
-        from helpers import fasta2a_server, mcp_server
+        from helpers.ui_server import (
+            LazyAsgiApp,
+            a2a_asgi_app,
+            gzip_asgi,
+            mcp_asgi_app,
+        )
 
         with startup_monitor.stage("wsgi.middleware.create"):
             wsgi_app = WSGIMiddleware(self.webapp)
 
-        with startup_monitor.stage("mcp.proxy.init"):
-            mcp_app = mcp_server.DynamicMcpProxy.get_instance()
+        with startup_monitor.stage("mcp.proxy.mount"):
+            mcp_app = LazyAsgiApp(mcp_asgi_app)
 
-        with startup_monitor.stage("a2a.proxy.init"):
-            a2a_app = fasta2a_server.DynamicA2AProxy.get_instance()
+        with startup_monitor.stage("a2a.proxy.mount"):
+            a2a_app = LazyAsgiApp(a2a_asgi_app)
 
         with startup_monitor.stage("starlette.app.create"):
             starlette_app = Starlette(
@@ -433,7 +438,7 @@ def install_route_hooks() -> None:
             )
 
         with startup_monitor.stage("socketio.asgi.create"):
-            return ASGIApp(self.socketio_server, other_asgi_app=starlette_app)
+            return ASGIApp(self.socketio_server, other_asgi_app=gzip_asgi(starlette_app))
 
     UiServerRuntime.build_asgi_app = build_asgi_app
     UiServerRuntime._a0_virtual_desktop_route_hooks_installed = True

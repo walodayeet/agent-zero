@@ -27,6 +27,12 @@ CONTEXT_DATA_NAME_CHAT_ACTIVE_SKILLS = "skills_chat_active"
 CONTEXT_DATA_NAME_CHAT_DISABLED_SKILLS = "skills_chat_disabled"
 CONTEXT_DATA_NAME_CHAT_VISIBLE_SKILLS = "skills_chat_visible"
 _WARNED_SKILL_PARSE_PATHS: set[Path] = set()
+_SKILL_PARSE_CACHE: dict[tuple, Optional["Skill"]] = {}
+_SKILL_PARSE_CACHE_LIMIT = 4096
+_SKILL_DISCOVERY_CACHE: dict[str, tuple[tuple, List[Path]]] = {}
+_SKILL_DISCOVERY_CACHE_LIMIT = 64
+_SKILL_LIST_CACHE: dict[tuple, List["Skill"]] = {}
+_SKILL_LIST_CACHE_LIMIT = 32
 
 
 class ActiveSkillEntry(TypedDict, total=False):
@@ -105,27 +111,66 @@ def _is_hidden_path(path: Path) -> bool:
     return any(part.startswith(".") for part in path.parts)
 
 
+def _pruned_dirnames(dirnames: List[str]) -> List[str]:
+    return sorted(
+        name
+        for name in dirnames
+        if not name.startswith(".") and name != "__pycache__" and name != "node_modules"
+    )
+
+
+def _dir_signature(root: Path) -> tuple:
+    signature: list[tuple[str, int]] = []
+    for dirpath, dirnames, _filenames in os.walk(root):
+        dirnames[:] = _pruned_dirnames(dirnames)
+        try:
+            stat = os.stat(dirpath)
+            signature.append((dirpath, stat.st_mtime_ns))
+        except OSError:
+            signature.append((dirpath, -1))
+    return tuple(signature)
+
+
 def discover_skill_md_files(root: Path) -> List[Path]:
     """
     Recursively discover SKILL.md files under a root directory.
     Hidden folders/files are ignored.
+
+    Results are cached per root until the directory layout or a directory mtime
+    changes (adding/removing a skill directory updates a parent mtime); file edits
+    are handled by the markdown parse cache.
     """
+    root = Path(root)
     if not root.exists():
         return []
 
+    signature = _dir_signature(root)
+    cached = _SKILL_DISCOVERY_CACHE.get(str(root))
+    if cached is not None and cached[0] == signature:
+        return list(cached[1])
+
     results: List[Path] = []
-    for p in root.rglob("SKILL.md"):
+    # os.walk + early directory pruning avoids descending into hidden/vendor trees,
+    # which dominates prompt builds when many skills are installed.
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames[:] = _pruned_dirnames(dirnames)
+        if "SKILL.md" not in filenames:
+            continue
+        path = Path(dirpath) / "SKILL.md"
         try:
-            if not p.is_file():
+            if not path.is_file():
                 continue
-            if _is_hidden_path(p.relative_to(root)):
+            if _is_hidden_path(path.relative_to(root)):
                 continue
-            results.append(p)
+            results.append(path)
         except Exception:
             # If relative_to fails (weird symlink), fall back to conservative checks
-            if p.is_file() and ".git" not in str(p):
-                results.append(p)
+            if path.is_file() and ".git" not in str(path):
+                results.append(path)
     results.sort(key=lambda x: str(x))
+    if len(_SKILL_DISCOVERY_CACHE) >= _SKILL_DISCOVERY_CACHE_LIMIT:
+        _SKILL_DISCOVERY_CACHE.clear()
+    _SKILL_DISCOVERY_CACHE[str(root)] = (signature, list(results))
     return results
 
 
@@ -300,7 +345,41 @@ def _warn_skill_skipped(skill_md_path: Path, markdown: str, errors: List[str]) -
     )
 
 
+def _skill_cache_key(
+    skill_md_path: Path, include_content: bool, validate: bool
+) -> Optional[tuple]:
+    if include_content:
+        return None
+    try:
+        stat = skill_md_path.stat()
+    except OSError:
+        return None
+    return (str(skill_md_path), stat.st_mtime_ns, stat.st_size, validate)
+
+
 def skill_from_markdown(
+    skill_md_path: Path,
+    *,
+    include_content: bool = False,
+    validate: bool = True,
+) -> Optional[Skill]:
+    # Frontmatter parsing is the per-prompt hot spot when many skills are installed;
+    # cache by file identity so repeated prompt builds only stat the file.
+    cache_key = _skill_cache_key(Path(skill_md_path), include_content, validate)
+    if cache_key is not None and cache_key in _SKILL_PARSE_CACHE:
+        return _SKILL_PARSE_CACHE[cache_key]
+
+    skill = _parse_skill_markdown(
+        skill_md_path, include_content=include_content, validate=validate
+    )
+    if cache_key is not None:
+        if len(_SKILL_PARSE_CACHE) >= _SKILL_PARSE_CACHE_LIMIT:
+            _SKILL_PARSE_CACHE.clear()
+        _SKILL_PARSE_CACHE[cache_key] = skill
+    return skill
+
+
+def _parse_skill_markdown(
     skill_md_path: Path,
     *,
     include_content: bool = False,
@@ -369,37 +448,69 @@ def skill_from_markdown(
     return skill
 
 
+def _skill_files_signature(skill_md_files: List[Path]) -> tuple:
+    signature = []
+    for path in skill_md_files:
+        try:
+            stat = path.stat()
+            signature.append((str(path), stat.st_mtime_ns, stat.st_size))
+        except OSError:
+            signature.append((str(path), -1, -1))
+    return tuple(signature)
+
+
+def _build_skill_list(
+    skill_md_files: List[Path], include_content: bool
+) -> List[Skill]:
+    skills: List[Skill] = []
+    for skill_md in skill_md_files:
+        parsed = skill_from_markdown(skill_md, include_content=include_content)
+        if parsed:
+            skills.append(parsed)
+    return skills
+
+
 def list_skills(
     agent:Agent|None=None,
     include_content: bool = False,
     include_hidden: bool = False,
 ) -> List[Skill]:
     """List skills, optionally filtered by agent scope."""
-    skills: List[Skill] = []
-
     roots = get_skill_roots(agent)
+    skill_md_files = [
+        skill_md
+        for root in roots
+        for skill_md in discover_skill_md_files(Path(root))
+    ]
 
-    for root in roots:
-        for skill_md in discover_skill_md_files(Path(root)):
-            s = skill_from_markdown(skill_md, include_content=include_content)
-            if s:
-                skills.append(s)
-
-    # no deduplication for global skills
-    if not agent:
-        return skills
+    skills: List[Skill]
+    if include_content:
+        skills = _build_skill_list(skill_md_files, include_content)
+    else:
+        # Frontmatter-only listings are cached by root set + per-file identity, so a
+        # prompt build only stats the skill files instead of rebuilding the list.
+        signature = (tuple(roots), _skill_files_signature(skill_md_files))
+        cached = _SKILL_LIST_CACHE.get(signature)
+        if cached is not None:
+            skills = cached
+        else:
+            skills = _build_skill_list(skill_md_files, include_content)
+            if len(_SKILL_LIST_CACHE) >= _SKILL_LIST_CACHE_LIMIT:
+                _SKILL_LIST_CACHE.clear()
+            _SKILL_LIST_CACHE[signature] = skills
 
     # Dedupe by normalized name, preserving root_order priority (earlier wins)
-    by_name: Dict[str, Skill] = {}
-    for s in skills:
-        key = _normalize_name(s.name) or _normalize_name(s.path.name)
-        if key and key not in by_name:
-            by_name[key] = s
-    
-    result = list(by_name.values())
-    if include_hidden:
-        return result
-    return _filter_hidden_skills(agent, result)
+    if agent:
+        by_name: Dict[str, Skill] = {}
+        for s in skills:
+            key = _normalize_name(s.name) or _normalize_name(s.path.name)
+            if key and key not in by_name:
+                by_name[key] = s
+        skills = list(by_name.values())
+
+    if include_hidden or not agent:
+        return list(skills)
+    return _filter_hidden_skills(agent, skills)
 
 
 def delete_skill(

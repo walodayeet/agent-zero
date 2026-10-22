@@ -56,6 +56,7 @@
 
 ## Runtime Contracts
 
+- `get_default_settings()` is cached by version (`_default_settings_cache`); `get_settings()` still normalizes and reloads sensitive values on every call, so env/.env edits and per-call hooks keep working. `set_settings`/`reload_settings` replace `_settings` and therefore repopulate the cache.
 - Settings reads use `models.get_api_key_raw()` to preserve complete key lists without advancing runtime rotation or persisting keys synthesized by runtime hooks. Masking, authentication reloads, and intentional clearing retain their existing behavior.
 - `ui_control_visibility` accepts dynamic `canvas:<surface-id>` entries as well as built-in controls, normalizes device values to booleans (default shown), and preserves choices for temporarily unavailable plugins.
 

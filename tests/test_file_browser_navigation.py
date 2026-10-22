@@ -14,6 +14,14 @@ if str(PROJECT_ROOT) not in sys.path:
 from helpers.file_browser import FileBrowser
 
 
+@pytest.fixture(autouse=True)
+def _container_file_browser_root(monkeypatch):
+    """Upstream contract: the File Browser spans `/`; bare-metal root containment is separate."""
+    from helpers import runtime
+
+    monkeypatch.setattr(runtime, "is_local_runtime", lambda: False)
+
+
 def read(*parts: str) -> str:
     return PROJECT_ROOT.joinpath(*parts).read_text(encoding="utf-8")
 

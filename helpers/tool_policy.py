@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass
 import os
 import re
+import time
 from typing import Any
 
 from helpers import files, plugins, subagents
@@ -37,18 +39,37 @@ def normalize_policy(config: Any) -> dict[str, Any]:
     return raw
 
 
-def get_policy(agent: Any) -> dict[str, Any]:
-    from helpers import projects
+_POLICY_CACHE: dict[tuple[str, str], tuple[tuple, float, dict[str, Any]]] = {}
+_POLICY_TTL_SECONDS = 2.0
 
-    project_name = projects.get_context_project_name(agent.context) or ""
-    profile = str(getattr(agent.config, "profile", "") or "")
-    for asset in plugins.find_plugin_assets(
-        plugins.CONFIG_FILE_NAME,
-        plugin_name=PLUGIN_NAME,
-        project_name=project_name,
-        agent_profile=profile,
-        only_first=False,
-    ):
+
+def _fallback_policy_signature() -> tuple:
+    """The default `_tool_access` config can be read when no custom policy exists."""
+    plugin_dir = plugins.find_plugin_dir(PLUGIN_NAME)
+    if not plugin_dir:
+        return ("missing",)
+    path = files.get_abs_path(plugin_dir, plugins.CONFIG_DEFAULT_FILE_NAME)
+    try:
+        stat = os.stat(path)
+        return (str(path), stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return (str(path), -1, -1)
+
+
+def _policy_asset_signature(assets: list[dict[str, Any]]) -> tuple:
+    signature = []
+    for asset in assets:
+        path = str(asset.get("path") or "")
+        try:
+            stat = os.stat(path)
+            signature.append((path, stat.st_mtime_ns, stat.st_size))
+        except OSError:
+            signature.append((path, -1, -1))
+    return tuple(signature)
+
+
+def _resolve_policy(assets: list[dict[str, Any]]) -> dict[str, Any]:
+    for asset in assets:
         config = files.read_file_json(asset["path"])
         if not isinstance(config, dict) or not any(
             key in config
@@ -59,6 +80,39 @@ def get_policy(agent: Any) -> dict[str, Any]:
         if policy["mode"] == "custom":
             return policy
     return normalize_policy(plugins.get_default_plugin_config(PLUGIN_NAME))
+
+
+def get_policy(agent: Any) -> dict[str, Any]:
+    from helpers import projects
+
+    project_name = projects.get_context_project_name(agent.context) or ""
+    profile = str(getattr(agent.config, "profile", "") or "")
+    assets = list(
+        plugins.find_plugin_assets(
+            plugins.CONFIG_FILE_NAME,
+            plugin_name=PLUGIN_NAME,
+            project_name=project_name,
+            agent_profile=profile,
+            only_first=False,
+        )
+    )
+
+    # Callers (Telegram/WhatsApp settings UIs) mutate the returned dict, so the
+    # cache stores the resolved policy and hands out copies.
+    key = (project_name, profile)
+    signature = (_policy_asset_signature(assets), _fallback_policy_signature())
+    now = time.monotonic()
+    cached = _POLICY_CACHE.get(key)
+    if (
+        cached is not None
+        and cached[0] == signature
+        and (now - cached[1]) < _POLICY_TTL_SECONDS
+    ):
+        return deepcopy(cached[2])
+
+    policy = _resolve_policy(assets)
+    _POLICY_CACHE[key] = (signature, now, policy)
+    return deepcopy(policy)
 
 
 def get_tool_catalog(agent: Any) -> list[dict[str, Any]]:

@@ -74,10 +74,9 @@ const model = {
       this.editor.destroy();
     }
 
-    // Check if ACE is available
+    // ACE loads after first paint; retry instead of surfacing a permanent error.
     if (!window.ace?.edit) {
-      console.error("ACE editor not available");
-      this.error = "Editor library not loaded";
+      window.addEventListener("a0-vendor-ready", () => this.initEditor(), { once: true });
       return;
     }
 

@@ -2802,19 +2802,44 @@ function convertLatexDelimiters(content) {
   );
 }
 
+// KaTeX loads after first paint (js/vendor-lazy.js); queue renders that arrive
+// before it is available instead of throwing on restored chats with math.
+function whenKatexReady(callback) {
+  if (globalThis.katex && globalThis.renderMathInElement) {
+    callback();
+    return;
+  }
+  let done = false;
+  let timer = null;
+  const run = () => {
+    if (done) return;
+    if (!globalThis.katex || !globalThis.renderMathInElement) return;
+    done = true;
+    if (timer !== null) clearTimeout(timer);
+    globalThis.removeEventListener("a0-vendor-ready", run);
+    callback();
+  };
+  globalThis.addEventListener("a0-vendor-ready", run);
+  timer = globalThis.setTimeout(run, 3000);
+}
+
 function renderLatexElements(container) {
-  container.querySelectorAll("latex").forEach((element) => {
-    globalThis.katex.render(element.textContent, element, {
-      displayMode: element.dataset.display === "true",
-      throwOnError: false,
+  whenKatexReady(() => {
+    container.querySelectorAll("latex").forEach((element) => {
+      globalThis.katex.render(element.textContent, element, {
+        displayMode: element.dataset.display === "true",
+        throwOnError: false,
+      });
     });
   });
 }
 
 function renderLatexText(container) {
-  globalThis.renderMathInElement(container, {
-    throwOnError: false,
-    errorCallback: () => {},
+  whenKatexReady(() => {
+    globalThis.renderMathInElement(container, {
+      throwOnError: false,
+      errorCallback: () => {},
+    });
   });
 }
 

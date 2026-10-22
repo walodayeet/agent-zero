@@ -27,6 +27,7 @@ def _register_helpers_stubs():
     files = types.ModuleType("helpers.files")
     files.normalize_a0_path = lambda path: str(path).replace("\\", "/")
     files.fix_dev_path = lambda path: str(path).replace("\\", "/")
+    files.display_path = lambda path: str(path).replace("\\", "/")
     files.get_abs_path = lambda *parts: "/" + "/".join(str(part).strip("/") for part in parts if part)
     files.exists = lambda path: False
     files.is_in_dir = lambda path, root: str(path).startswith(str(root))

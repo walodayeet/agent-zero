@@ -182,6 +182,7 @@ UI_CONTROL_VISIBILITY_DEFAULTS = {
 
 SETTINGS_FILE = files.get_abs_path("usr/settings.json")
 _settings: Settings | None = None
+_default_settings_cache: tuple[Any, Settings] | None = None
 _settings_version_cache: ContextVar[dict[str, str] | None] = ContextVar(
     "settings_version_cache", default=None
 )
@@ -584,9 +585,19 @@ def _write_sensitive_settings(settings: Settings):
 
 
 def get_default_settings() -> Settings:
+    global _default_settings_cache
+    version = _get_version()
+    if _default_settings_cache is not None and _default_settings_cache[0] == version:
+        return deepcopy(_default_settings_cache[1])
+    built = _build_default_settings(version)
+    _default_settings_cache = (version, built)
+    return deepcopy(built)
+
+
+def _build_default_settings(version: str | None = None) -> Settings:
     gitignore = files.read_file(files.get_abs_path("conf/workdir.gitignore"))
     return Settings(
-        version=_get_version(),
+        version=version if version is not None else _get_version(),
         api_keys={},
         auth_login="",
         auth_password="",

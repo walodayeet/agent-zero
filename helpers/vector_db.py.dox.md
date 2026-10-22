@@ -27,6 +27,7 @@
 
 ## Runtime Contracts
 
+- `VectorDB` caches the embedding dimension per embedding model namespace (`_cached_dimensions`), so constructing a DB for an already-seen model no longer performs a probe `embed_query("example")` round-trip. The first construction per model still probes once.
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Observed side-effect areas: filesystem deletion.

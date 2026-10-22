@@ -28,7 +28,176 @@ def _from_timestamp(timestamp: float) -> datetime:
     return datetime.fromtimestamp(timestamp, tz=Localization.get().get_tzinfo())
 
 
+
+_TREE_CACHE: dict[tuple, tuple[tuple, str]] = {}
+_TREE_CACHE_LIMIT = 32
+
+
+def _ignore_reference(ignore: str | None, root_abs_path: str) -> str | None:
+    if not ignore or not ignore.startswith("file:"):
+        return None
+    reference = ignore[5:]
+    if reference.startswith("///"):
+        return reference[2:]
+    if reference.startswith("//"):
+        return os.path.join(root_abs_path, reference[2:])
+    if reference.startswith("/"):
+        return reference
+    return os.path.join(root_abs_path, reference)
+
+
+def _ignore_signature(ignore: str | None, root_abs_path: str) -> tuple:
+    """Identify the ignore source so edits to an ignore file invalidate the cache."""
+    if not ignore:
+        return ("none",)
+    reference = _ignore_reference(ignore, root_abs_path)
+    if reference is None:
+        return ("inline", hash(ignore))
+    try:
+        stat = os.stat(reference)
+        return ("file", reference, stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        return ("file-missing", reference)
+
+
+def _layout_signature(
+    root: str,
+    max_depth: int,
+    include_entry_times: bool,
+    ignore_spec: Optional[PathSpec] = None,
+) -> tuple:
+    """Directory (and, when sorting by time, entry) mtimes: catches add/remove/rename/edit.
+
+    Hidden entries are included: the renderer only prunes via the ignore spec, so
+    skipping dot directories here would let their changes go unnoticed. Directories
+    excluded by the ignore spec are only stat'ed (their own mtime still invalidates).
+    """
+    signature: list[tuple] = []
+    root_norm = os.path.normpath(root)
+    visibility_cache: dict[str, bool] = {}
+
+    def _walk(directory: str, depth: int) -> None:
+        try:
+            stat = os.stat(directory)
+            signature.append((directory, stat.st_mtime_ns))
+            entries = sorted(os.scandir(directory), key=lambda item: item.name)
+        except OSError:
+            signature.append((directory, -1))
+            return
+
+        for entry in entries:
+            if entry.name in (".", ".."):
+                continue
+            try:
+                is_dir = entry.is_dir(follow_symlinks=False)
+                if include_entry_times:
+                    entry_stat = entry.stat(follow_symlinks=False)
+                    signature.append((entry.path, entry_stat.st_mtime_ns, entry_stat.st_ctime_ns))
+            except OSError:
+                continue
+            if not is_dir or (max_depth and depth >= max_depth):
+                continue
+            if ignore_spec is not None:
+                relative = _normalize_relative_path(os.path.relpath(entry.path, root_norm))
+                ignored = bool(relative) and (
+                    ignore_spec.match_file(relative)
+                    or ignore_spec.match_file(f"{relative}/")
+                )
+                if ignored and not _directory_has_visible_entries(
+                    entry.path,
+                    root_norm,
+                    ignore_spec,
+                    visibility_cache,
+                    (max_depth - depth) if max_depth else -1,
+                ):
+                    # The renderer hides this directory entirely, so its contents cannot affect output.
+                    continue
+            _walk(entry.path, depth + 1)
+
+    _walk(root, 1)
+    return tuple(signature)
+
+
 def file_tree(
+    relative_path: str,
+    *,
+    max_depth: int = 0,
+    max_lines: int = 0,
+    folders_first: bool = True,
+    max_folders: int = 0,
+    max_files: int = 0,
+    sort: tuple[Literal["name", "created", "modified"], Literal["asc", "desc"]] = ("modified", "desc"),
+    ignore: str | None = None,
+    output_mode: Literal["string", "flat", "nested", "indent"] = OUTPUT_MODE_STRING,
+) -> str | list[dict]:
+    """Render a directory tree; text modes are cached by layout + ignore signature."""
+    if output_mode not in (OUTPUT_MODE_STRING, OUTPUT_MODE_INDENT):
+        return _file_tree_impl(
+            relative_path,
+            max_depth=max_depth,
+            max_lines=max_lines,
+            folders_first=folders_first,
+            max_folders=max_folders,
+            max_files=max_files,
+            sort=sort,
+            ignore=ignore,
+            output_mode=output_mode,
+        )
+
+    abs_root = files_helper.get_abs_path(relative_path)
+    if not os.path.isdir(abs_root):
+        return _file_tree_impl(
+            relative_path,
+            max_depth=max_depth,
+            max_lines=max_lines,
+            folders_first=folders_first,
+            max_folders=max_folders,
+            max_files=max_files,
+            sort=sort,
+            ignore=ignore,
+            output_mode=output_mode,
+        )
+
+    key = (
+        abs_root,
+        max_depth,
+        max_lines,
+        folders_first,
+        max_folders,
+        max_files,
+        sort,
+        _ignore_signature(ignore, abs_root),
+        output_mode,
+    )
+    ignore_spec = _resolve_ignore_patterns(ignore, abs_root)
+    signature = _layout_signature(
+        abs_root,
+        max_depth,
+        include_entry_times=sort[0] != SORT_BY_NAME,
+        ignore_spec=ignore_spec,
+    )
+    cached = _TREE_CACHE.get(key)
+    if cached is not None and cached[0] == signature:
+        return cached[1]
+
+    value = _file_tree_impl(
+        relative_path,
+        max_depth=max_depth,
+        max_lines=max_lines,
+        folders_first=folders_first,
+        max_folders=max_folders,
+        max_files=max_files,
+        sort=sort,
+        ignore=ignore,
+        output_mode=output_mode,
+    )
+    if len(_TREE_CACHE) >= _TREE_CACHE_LIMIT:
+        _TREE_CACHE.clear()
+    _TREE_CACHE[key] = (signature, value)
+    return value
+
+
+def _file_tree_impl(
     relative_path: str,
     *,
     max_depth: int = 0,

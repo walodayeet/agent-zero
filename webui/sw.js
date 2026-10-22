@@ -1,6 +1,9 @@
 const CACHE_PREFIX = "agent-zero-ui-assets-";
 const SCRIPT_VERSION = new URL(self.location.href).searchParams.get("version") || "runtime";
 const MAX_RUNTIME_CACHEABLE_TRANSFER_BYTES = 256 * 1024;
+// Heavy vendor libs load after first paint (js/vendor-lazy.js), so they are not in
+// the startup bundle; cache them on first use despite exceeding the generic cap.
+const LARGE_RUNTIME_CACHE_ALLOWLIST = /\/vendor\/(?:ace-min\/ace|katex\/katex(?:\.auto-render)?\.min|qrcode\.min|flatpickr\/flatpickr\.min)\.js$/i;
 const CACHEABLE_FILE_PATTERN = /\.(?:css|html?|xhtml|m?js)$/i;
 
 let activeCacheName = cacheName(SCRIPT_VERSION);
@@ -221,13 +224,17 @@ function isCacheableResponse(response) {
 }
 
 async function cacheRuntimeResponse(cache, request, response) {
-  const contentLength = response.headers.get("content-length");
-  if (contentLength !== null) {
-    const size = Number(contentLength);
-    if (!Number.isFinite(size) || size > MAX_RUNTIME_CACHEABLE_TRANSFER_BYTES) return;
-  } else {
-    const body = await response.clone().arrayBuffer();
-    if (body.byteLength > MAX_RUNTIME_CACHEABLE_TRANSFER_BYTES) return;
+  const url = new URL(request.url);
+  const allowLarge = LARGE_RUNTIME_CACHE_ALLOWLIST.test(url.pathname);
+  if (!allowLarge) {
+    const contentLength = response.headers.get("content-length");
+    if (contentLength !== null) {
+      const size = Number(contentLength);
+      if (!Number.isFinite(size) || size > MAX_RUNTIME_CACHEABLE_TRANSFER_BYTES) return;
+    } else {
+      const body = await response.clone().arrayBuffer();
+      if (body.byteLength > MAX_RUNTIME_CACHEABLE_TRANSFER_BYTES) return;
+    }
   }
   await cache.put(request, response);
 }

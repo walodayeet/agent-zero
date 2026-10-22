@@ -130,7 +130,6 @@
 
     <!-- Flatpickr for datetime picker -->
     <link rel="preload" as="style" href="vendor/flatpickr/flatpickr.min.css" onload="this.onload=null;this.rel='stylesheet'">
-    <script defer src="vendor/flatpickr/flatpickr.min.js"></script>
 
     <script>
         globalThis.safeCall = function (name, ...args) {
@@ -144,17 +143,12 @@
     <script defer src="vendor/bootstrap/bootstrap.bundle.min.js"></script>
 
     <!-- Then load Alpine.js -->
-    <script defer src="vendor/ace-min/ace.js"></script>
-    <script defer src="vendor/qrcode.min.js"></script>
     <script type="module" src="js/initFw.js"></script>
+    <script defer src="js/vendor-lazy.js"></script>
 
-    <link rel="preload" as="style" href="vendor/ace-min/ace.min.css" onload="this.onload=null;this.rel='stylesheet'">
     <!-- KaTeX CSS -->
-    <link rel="preload" as="style" href="vendor/katex/katex.min.css" crossorigin="anonymous" onload="this.onload=null;this.rel='stylesheet'">
 
     <!-- KaTeX javascript -->
-    <script defer src="vendor/katex/katex.min.js" crossorigin="anonymous"></script>
-    <script defer src="vendor/katex/katex.auto-render.min.js" crossorigin="anonymous"></script>
 
     <!-- Link the PWA manifest file -->
     <link rel="manifest" href="js/manifest.json">

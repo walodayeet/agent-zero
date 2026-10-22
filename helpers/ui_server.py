@@ -28,7 +28,7 @@ from uvicorn.middleware.wsgi import WSGIMiddleware
 from werkzeug.wrappers.request import Request as WerkzeugRequest
 import socketio  # type: ignore[import-untyped]
 
-from helpers import dotenv, fasta2a_server, files, git, login, mcp_server, runtime
+from helpers import dotenv, files, git, login, runtime
 from helpers.api import get_safe_next_url, register_api_route, requires_auth
 from helpers.extension import extensible, get_webui_extension_manifest
 from helpers.files import get_abs_path
@@ -50,6 +50,137 @@ SOCKETIO_PING_TIMEOUT_SECONDS = 120
 GZIP_MINIMUM_RESPONSE_BYTES = 1024
 GZIP_COMPRESSION_LEVEL = 6
 UI_INDEX_ASSET_URL = "/index.html"
+
+_COMPRESSIBLE_CONTENT_TYPES = (
+    "text/",
+    "application/json",
+    "application/javascript",
+    "application/xml",
+    "application/xhtml",
+    "image/svg+xml",
+    # WebUI fonts fall back to TTF/OTF when the browser rejects WOFF2.
+    "font/ttf",
+    "font/otf",
+)
+
+
+class WsgiTextGzip:
+    """Streaming gzip for compressible Flask responses.
+
+    The Starlette GZipMiddleware does not see the mounted Flask app's bodies, so
+    static JS/CSS/HTML was served uncompressed (~1.5MB of eager WebUI payload).
+    Only compressible content types are compressed, and the body is streamed, so
+    file downloads and media are untouched.
+    """
+
+    def __init__(self, app, minimum_size: int = GZIP_MINIMUM_RESPONSE_BYTES):
+        self.app = app
+        self.minimum_size = minimum_size
+
+    def __call__(self, environ, start_response):
+        if "gzip" not in (environ.get("HTTP_ACCEPT_ENCODING") or "").lower():
+            return self.app(environ, start_response)
+
+        state: dict[str, Any] = {}
+
+        def _start(status: str, headers, exc_info=None):
+            state["status"] = status
+            state["headers"] = headers
+            state["exc_info"] = exc_info
+            return lambda _data: None
+
+        app_iter = self.app(environ, _start)
+        headers = state.get("headers") or []
+        lower = {key.lower() for key, _ in headers}
+        content_type = ""
+        content_length = 0
+        for key, value in headers:
+            name = key.lower()
+            if name == "content-type":
+                content_type = value.lower()
+            elif name == "content-length":
+                try:
+                    content_length = int(value)
+                except ValueError:
+                    content_length = 0
+
+        status = state.get("status", "")
+        method = (environ.get("REQUEST_METHOD") or "GET").upper()
+        if (
+            "content-encoding" in lower
+            or not status.startswith("200")
+            or method == "HEAD"
+            or environ.get("HTTP_RANGE")
+            or "content-range" in lower
+            or content_type.startswith("text/event-stream")
+            or not content_type.startswith(_COMPRESSIBLE_CONTENT_TYPES)
+            or (content_length and content_length < self.minimum_size)
+        ):
+            start_response(status, headers, state.get("exc_info"))
+            return app_iter
+
+        import zlib
+
+        def _compress():
+            compressor = zlib.compressobj(
+                GZIP_COMPRESSION_LEVEL, zlib.DEFLATED, zlib.MAX_WBITS | 16
+            )
+            try:
+                for chunk in app_iter:
+                    if chunk:
+                        yield compressor.compress(chunk)
+                yield compressor.flush()
+            finally:
+                close = getattr(app_iter, "close", None)
+                if callable(close):
+                    close()
+
+        filtered = [
+            (key, value)
+            for key, value in headers
+            if key.lower() not in ("content-length", "content-encoding")
+        ]
+        filtered.append(("Content-Encoding", "gzip"))
+        filtered.append(("Vary", "Accept-Encoding"))
+        start_response(state["status"], filtered)
+        return _compress()
+
+
+class LazyAsgiApp:
+    """Mount a child ASGI app that is imported and built on first request.
+
+    Keeps FastMCP/A2A out of the startup path; the proxy reads its settings when
+    it is finally constructed.
+    """
+
+    def __init__(self, factory: Any):
+        self._factory = factory
+        self._app: Any = None
+
+    async def __call__(self, scope, receive, send):
+        if self._app is None:
+            self._app = self._factory()
+        await self._app(scope, receive, send)
+
+
+def mcp_asgi_app():
+    from helpers import mcp_server
+
+    return mcp_server.DynamicMcpProxy.get_instance()
+
+
+def a2a_asgi_app():
+    from helpers import fasta2a_server
+
+    return fasta2a_server.DynamicA2AProxy.get_instance()
+
+
+def gzip_asgi(app):
+    return GZipMiddleware(
+        app,
+        minimum_size=GZIP_MINIMUM_RESPONSE_BYTES,
+        compresslevel=GZIP_COMPRESSION_LEVEL,
+    )
 
 
 def _positive_int_env(name: str, default: int) -> int:
@@ -85,6 +216,7 @@ class UiServerRuntime:
     @classmethod
     def create(cls) -> "UiServerRuntime":
         webapp = Flask("app", static_folder=get_abs_path("./webui"), static_url_path="/")
+        webapp.wsgi_app = WsgiTextGzip(webapp.wsgi_app)
         webapp.secret_key = os.getenv("FLASK_SECRET_KEY") or secrets.token_hex(32)
 
         WerkzeugRequest.max_form_memory_size = UPLOAD_LIMIT_BYTES
@@ -230,11 +362,11 @@ class UiServerRuntime:
         with startup_monitor.stage("wsgi.middleware.create"):
             wsgi_app = WSGIMiddleware(self.webapp)
 
-        with startup_monitor.stage("mcp.proxy.init"):
-            mcp_app = mcp_server.DynamicMcpProxy.get_instance()
+        with startup_monitor.stage("mcp.proxy.mount"):
+            mcp_app = LazyAsgiApp(mcp_asgi_app)
 
-        with startup_monitor.stage("a2a.proxy.init"):
-            a2a_app = fasta2a_server.DynamicA2AProxy.get_instance()
+        with startup_monitor.stage("a2a.proxy.mount"):
+            a2a_app = LazyAsgiApp(a2a_asgi_app)
 
         with startup_monitor.stage("starlette.app.create"):
             starlette_app = Starlette(
@@ -245,11 +377,7 @@ class UiServerRuntime:
                 ],
                 lifespan=startup_monitor.lifespan(),
             )
-            compressed_http_app = GZipMiddleware(
-                starlette_app,
-                minimum_size=GZIP_MINIMUM_RESPONSE_BYTES,
-                compresslevel=GZIP_COMPRESSION_LEVEL,
-            )
+            compressed_http_app = gzip_asgi(starlette_app)
 
         with startup_monitor.stage("socketio.asgi.create"):
             return ASGIApp(self.socketio_server, other_asgi_app=compressed_http_app)

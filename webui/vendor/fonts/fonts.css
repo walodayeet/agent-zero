@@ -3,7 +3,8 @@
   font-style: normal;
   font-weight: 300 900;
   font-display: swap;
-  src: url("./rubik-variable.ttf") format("truetype");
+  src: url("./rubik-variable.woff2") format("woff2"),
+       url("./rubik-variable.ttf") format("truetype");
 }
 
 @font-face {
@@ -11,7 +12,8 @@
   font-style: italic;
   font-weight: 300 900;
   font-display: swap;
-  src: url("./rubik-italic-variable.ttf") format("truetype");
+  src: url("./rubik-italic-variable.woff2") format("woff2"),
+       url("./rubik-italic-variable.ttf") format("truetype");
 }
 
 @font-face {
@@ -19,7 +21,8 @@
   font-style: normal;
   font-weight: 100 700;
   font-display: swap;
-  src: url("./roboto-mono-variable.ttf") format("truetype");
+  src: url("./roboto-mono-variable.woff2") format("woff2"),
+       url("./roboto-mono-variable.ttf") format("truetype");
 }
 
 @font-face {
@@ -27,5 +30,6 @@
   font-style: italic;
   font-weight: 100 700;
   font-display: swap;
-  src: url("./roboto-mono-italic-variable.ttf") format("truetype");
+  src: url("./roboto-mono-italic-variable.woff2") format("woff2"),
+       url("./roboto-mono-italic-variable.ttf") format("truetype");
 }

@@ -289,6 +289,11 @@ const model = {
     const container = document.getElementById("mcp-servers-config-json");
     if (!container) return;
 
+    if (!window.ace?.edit) {
+      window.addEventListener("a0-vendor-ready", () => this.setupEditor(), { once: true });
+      return;
+    }
+
     const editor = ace.edit("mcp-servers-config-json");
     const dark = localStorage.getItem("darkMode");
     editor.setTheme(dark !== "false" ? "ace/theme/github_dark" : "ace/theme/tomorrow");

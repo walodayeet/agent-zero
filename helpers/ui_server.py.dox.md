@@ -32,6 +32,10 @@
 - Top-level functions:
 - `_positive_int_env(name: str, default: int) -> int`
 - `configure_process_environment() -> None`
+- `mcp_asgi_app()` / `a2a_asgi_app()` — import and construct the MCP/A2A proxies on demand.
+- `gzip_asgi(app)` — the shared Starlette gzip wrapper (1 KiB minimum, level 6).
+- `WsgiTextGzip(app, minimum_size=...)` — streaming gzip for compressible Flask responses; pass-through for non-200, HEAD, Range/206, `text/event-stream`, already-encoded, and non-text types. Installed by `UiServerRuntime.create()` as `webapp.wsgi_app`.
+- `LazyAsgiApp(factory)` — ASGI shim that calls `factory()` on the first request and caches the child app; used to mount `/mcp` and `/a2a` without importing FastMCP at startup.
 - Notable constants/configuration names: `UPLOAD_LIMIT_BYTES`, `SOCKETIO_PING_INTERVAL_SECONDS`, `SOCKETIO_PING_TIMEOUT_SECONDS`, `GZIP_MINIMUM_RESPONSE_BYTES`, `GZIP_COMPRESSION_LEVEL`, `UI_INDEX_ASSET_URL`, `A0_SOCKETIO_PING_INTERVAL_SECONDS`, `A0_SOCKETIO_PING_TIMEOUT_SECONDS`, and the shared `A0_WS_MAX_PAYLOAD_BYTES` import.
 
 ## Runtime Contracts
@@ -49,7 +53,8 @@
 - `serve_index()` bootstraps the normalized UI control visibility map, timezone and time-format preferences, and the complete enabled WebUI extension manifest so startup extension discovery requires no per-surface API requests.
 - Authenticated extension asset routes serve root-contained files from both `extensions/webui/` and `usr/extensions/webui/`, matching the URLs emitted by the WebUI extension manifest.
 - The authenticated `/` route uses `serve_splash()` to return the no-store, self-contained bootstrap document. The authenticated extensionless `/ui/index` route renders the existing index and runtime/user placeholders for the splash to install into the current document without navigation; `/index.html` remains a direct fallback for the same rendering path. The authenticated `/safe` route first returns a no-store, self-contained document that unregisters all origin service workers, then renders the existing index through `serve_index()` when its internal `__direct=1` marker is present; it never initializes the asset bundle or a worker. The authenticated `serve_ui_asset_bundle()` endpoint passes the application entry URL to the generic recursive bundler and supports gzip transfer and payload-specific ETag revalidation while component, extension, and Alpine lifecycles remain unchanged.
-- The Starlette HTTP branch applies negotiated gzip to responses of at least 1 KiB at compression level 6 while preserving already encoded responses; Socket.IO remains outside that middleware branch.
+- The Starlette HTTP branch applies negotiated gzip to responses of at least 1 KiB at compression level 6 while preserving already encoded responses; Socket.IO remains outside that middleware branch. Flask bodies are compressed one layer below by `WsgiTextGzip`, because the Starlette middleware never sees them.
+- `/mcp` and `/a2a` are mounted through `LazyAsgiApp(mcp_asgi_app)` / `LazyAsgiApp(a2a_asgi_app)`: the proxies are imported and constructed on the first request to those mounts, so FastMCP stays out of the startup path. Other ASGI builders (the virtual-desktop hook) must reuse `mcp_asgi_app`/`a2a_asgi_app`/`gzip_asgi` rather than importing the proxies directly.
 - Keep request/response, tool, or helper semantics documented here at the same time as source changes.
 
 ## Work Guidance

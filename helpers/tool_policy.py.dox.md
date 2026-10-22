@@ -26,6 +26,7 @@
 
 ## Runtime Contracts
 
+- `get_policy()` is cached per (project, profile) against the resolved `_tool_access` config asset signature (path, mtime, size) and returns a deep copy: Telegram/WhatsApp settings UIs mutate the returned dict, so a shared instance would corrupt policy process-wide.
 - Scoped asset precedence comes from `helpers.plugins`: active project profile,
   active project, user profile, bundled/plugin profile, then default.
   `get_policy` selects the first custom policy; unknown-only and

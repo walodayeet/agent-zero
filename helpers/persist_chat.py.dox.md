@@ -39,6 +39,7 @@
 
 ## Runtime Contracts
 
+- `saved_chat_ids()` is cached against the chats directory mtime; creating or removing a chat folder invalidates it. The returned set is always a copy.
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Observed side-effect areas: filesystem reads, filesystem writes, filesystem deletion, settings/state persistence, scheduler state.

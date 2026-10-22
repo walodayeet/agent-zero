@@ -14,6 +14,12 @@ from api.download_work_dir_file import resolve_download_path
 from helpers.file_archives import create_selected_zip
 
 
+@pytest.fixture(autouse=True)
+def _container_path_semantics(monkeypatch):
+    """These tests assert the File Browser root (`/`) contract, not bare-metal containment."""
+    monkeypatch.setattr(runtime, "is_local_runtime", lambda: False)
+
+
 def test_download_resolvers_match_file_browser_root(tmp_path: Path) -> None:
     file_path = tmp_path / "outside-a0.txt"
     file_path.write_text("downloadable", encoding="utf-8")

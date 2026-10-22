@@ -47,6 +47,24 @@ def _iter_prompt_files():
         yield from prompts_dir.rglob("*.md")
 
 
+@pytest.fixture(autouse=True)
+def _bundled_skill_roots_only(monkeypatch):
+    """Keep prompt-budget assertions hermetic: local `usr/skills` are user data."""
+    from helpers import skills as skills_helper
+
+    original = skills_helper.get_skill_roots
+    usr_root = str(PROJECT_ROOT / "usr")
+
+    def roots(agent=None):
+        return [
+            root
+            for root in original(agent)
+            if not str(root).startswith(usr_root)
+        ]
+
+    monkeypatch.setattr(skills_helper, "get_skill_roots", roots, raising=True)
+
+
 async def _build_system_text(profile: str = "agent0", rendered: bool = False) -> str:
     old_args = dict(runtime.args)
     runtime.args.clear()

@@ -80,10 +80,12 @@ def init_a0():
     init_chats.result_sync()
 
     def finish_init():
-        # Give the first chat a warm model without waiting indefinitely on downloads.
-        if init_preload:
+        # Warm the embedding model without blocking HTTP longer than configured:
+        # bare metal serves immediately, Docker keeps its 10s budget.
+        wait_seconds = runtime.get_preload_wait_seconds()
+        if init_preload and wait_seconds > 0:
             try:
-                init_preload.result_sync(timeout=10)
+                init_preload.result_sync(timeout=wait_seconds)
             except TimeoutError:
                 pass
             except Exception as e:

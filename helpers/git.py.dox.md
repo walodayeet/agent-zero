@@ -37,6 +37,7 @@
 
 ## Runtime Contracts
 
+- `get_git_info()` is cached against a cheap ref-state signature (`.git/HEAD` content+mtime, `packed-refs`, `refs/heads`, `refs/tags`); commits, checkouts and tag changes invalidate it. GitPython `Repo()` construction no longer runs per `get_settings()` call.
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Git commit and release timestamp strings produced by `_format_git_timestamp` use UTC and omit a timezone suffix.
 - Update rollback restores staged edits with the stash index and preserves existing stash entries. Tracked A0 metadata participates in stashing so rollback cannot discard it. Rebase disables Git autostash and updates to other branch refs.

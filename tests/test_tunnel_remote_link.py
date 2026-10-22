@@ -371,6 +371,9 @@ def test_tailscale_installer_downloads_static_pair_when_system_daemon_is_missing
         "which",
         lambda binary: "/usr/bin/tailscale" if binary == "tailscale" else None,
     )
+    monkeypatch.setattr(
+        modules.tailscale, "resolve_tailscaled_binary", lambda binary_path: None
+    )
     monkeypatch.setattr(modules.cli, "RUNTIME_BIN_DIR", tmp_path / "bin")
     monkeypatch.setattr(
         modules.tailscale,
@@ -621,7 +624,7 @@ def test_tailscale_preflight_emits_login_url_from_tailscale_up(
         lambda *args, **kwargs: FakeProcess(),
     )
 
-    with pytest.raises(RuntimeError, match="joining this container to your tailnet"):
+    with pytest.raises(RuntimeError, match="joining this host to your tailnet"):
         modules.tailscale.ensure_tailscale_ready(
             "/tmp/tailscale",
             notify=lambda event, message, data=None: notifications.append(
@@ -630,12 +633,12 @@ def test_tailscale_preflight_emits_login_url_from_tailscale_up(
         )
 
     assert notifications[0]["message"] == (
-        "Tailscale needs this container to join your tailnet. Running `tailscale up` now..."
+        "Tailscale needs this host to join your tailnet. Running `tailscale up` now..."
     )
     assert notifications[1] == {
         "event": "info",
         "message": (
-            "Open the Tailscale login link and approve this container. "
+            "Open the Tailscale login link and approve this host. "
             "Agent Zero will continue when Tailscale finishes setup."
         ),
         "data": {

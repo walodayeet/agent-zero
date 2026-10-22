@@ -380,15 +380,119 @@ def get_repo_release_info(repo_path: str) -> GitRepoReleaseInfo:
         )
 
 
+_git_info_cache: tuple[tuple, dict] | None = None
+
+
+def _resolve_git_dirs(repo_path: str) -> tuple[str, str]:
+    """Return (git_dir, common_dir), handling worktrees where `.git` is a file."""
+    marker = os.path.join(repo_path, ".git")
+    if os.path.isdir(marker):
+        git_dir = marker
+    else:
+        git_dir = marker
+        try:
+            with open(marker, "r", encoding="utf-8", errors="replace") as handle:
+                content = handle.read().strip()
+            if content.lower().startswith("gitdir:"):
+                git_dir = content.split(":", 1)[1].strip()
+                if not os.path.isabs(git_dir):
+                    git_dir = os.path.join(repo_path, git_dir)
+        except OSError:
+            pass
+    common_dir = git_dir
+    try:
+        with open(os.path.join(git_dir, "commondir"), "r", encoding="utf-8", errors="replace") as handle:
+            common = handle.read().strip()
+        if common:
+            common_dir = common if os.path.isabs(common) else os.path.join(git_dir, common)
+    except OSError:
+        pass
+    return os.path.normpath(git_dir), os.path.normpath(common_dir)
+
+
+def _tree_stamp(root: str, limit: int = 512) -> tuple:
+    """(relative path, mtime_ns, size) for the files under a ref directory."""
+    stamps: list[tuple] = []
+    if not os.path.isdir(root):
+        return ()
+    for dirpath, dirnames, filenames in os.walk(root):
+        dirnames.sort()
+        for name in sorted(filenames):
+            if len(stamps) >= limit:
+                return tuple(stamps)
+            path = os.path.join(dirpath, name)
+            try:
+                stat = os.stat(path)
+            except OSError:
+                continue
+            stamps.append((os.path.relpath(path, root), stat.st_mtime_ns, stat.st_size))
+    return tuple(stamps)
+
+
+def _git_state_signature(repo_path: str) -> tuple:
+    """Signature of the refs that drive version/describe: HEAD's target, refs and packed refs.
+
+    Watching only the `refs/heads` / `refs/tags` directory mtimes is not enough: a
+    new commit updates `.git/refs/heads/<branch>`, which leaves the parent directory
+    untouched. Linked worktrees additionally keep refs in the common git dir.
+    """
+    git_dir, common_dir = _resolve_git_dirs(repo_path)
+    head_path = os.path.join(git_dir, "HEAD")
+    head_content = ""
+    head_stamp: tuple = ("HEAD", -1, -1)
+    try:
+        stat = os.stat(head_path)
+        head_stamp = ("HEAD", stat.st_mtime_ns, stat.st_size)
+        with open(head_path, "r", encoding="utf-8", errors="replace") as handle:
+            head_content = handle.read().strip()
+    except OSError:
+        pass
+
+    target_stamp: tuple = ("target", -1, -1)
+    if head_content.startswith("ref:"):
+        target = head_content.split(":", 1)[1].strip()
+        target_path = os.path.join(common_dir, target)
+        try:
+            stat = os.stat(target_path)
+            target_stamp = (target, stat.st_mtime_ns, stat.st_size)
+        except OSError:
+            target_stamp = (target, -1, -1)
+
+    packed_path = os.path.join(common_dir, "packed-refs")
+    try:
+        stat = os.stat(packed_path)
+        packed_stamp: tuple = (stat.st_mtime_ns, stat.st_size)
+    except OSError:
+        packed_stamp = (-1, -1)
+
+    return (
+        repo_path,
+        git_dir,
+        common_dir,
+        head_content,
+        head_stamp,
+        target_stamp,
+        packed_stamp,
+        _tree_stamp(os.path.join(common_dir, "refs", "heads")),
+        _tree_stamp(os.path.join(common_dir, "refs", "tags")),
+    )
+
+
 def get_git_info():
+    global _git_info_cache
+
     # Get the current working directory (assuming the repo is in the same folder as the script)
     repo_path = files.get_base_dir()
+
+    signature = _git_state_signature(repo_path)
+    if _git_info_cache is not None and _git_info_cache[0] == signature:
+        return dict(_git_info_cache[1])
 
     state = get_repo_release_info(repo_path)
     if not state.is_git_repo:
         raise ValueError(state.error or f"Repository at {repo_path} is not usable.")
 
-    return {
+    info = {
         "branch": state.branch,
         "commit_hash": state.head.hash if state.head else "",
         "commit_time": state.head.committed_at if state.head else "",
@@ -396,6 +500,8 @@ def get_git_info():
         "short_tag": state.release.short_tag if state.release else "",
         "version": state.release.version if state.release else "",
     }
+    _git_info_cache = (signature, info)
+    return dict(info)
 
 def get_version():
     try:

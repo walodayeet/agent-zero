@@ -3,6 +3,8 @@ from helpers import cache
 from helpers import yaml as yaml_helper
 from typing import TypedDict, TYPE_CHECKING, Literal
 from pydantic import BaseModel, model_validator
+from contextlib import contextmanager
+import contextvars
 import json
 import os
 
@@ -13,6 +15,32 @@ USER_AGENTS_DIR = "usr/agents"
 PATHS_CACHE_AREA = "subagent_paths(plugins)"
 
 cache.toggle_area(PATHS_CACHE_AREA, False)
+
+
+# Prompt builds ask for the same path sets dozens of times. The scope is explicit
+# (started per prompt build via `agent/Agent/get_system_prompt` hooks) and held in a
+# ContextVar, so it never leaks between builds, tasks or agents.
+_path_scope_var: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
+    "subagent_path_scope", default=None
+)
+
+
+def begin_path_scope() -> None:
+    _path_scope_var.set({})
+
+
+def end_path_scope() -> None:
+    _path_scope_var.set(None)
+
+
+@contextmanager
+def path_scope():
+    token = _path_scope_var.set({})
+    try:
+        yield
+    finally:
+        _path_scope_var.reset(token)
+
 
 type Origin = Literal["default", "user", "project", "plugin"]
 
@@ -289,7 +317,51 @@ def get_agents_roots() -> list[str]:
     return unique
 
 
+_AGENT_DEFINITION_FILES = ("agent.json", "agent.yaml", "agent.yml", "_context.md")
+_agents_snapshot_cache: tuple[tuple, list[dict[str, str]]] | None = None
+
+
+def _agents_root_signature(root: str) -> tuple:
+    """(subdir, dir mtime, definition mtimes) per agent folder: catches add/remove/edit."""
+    entries: list[tuple] = []
+    try:
+        with os.scandir(root) as iterator:
+            for entry in iterator:
+                try:
+                    # The builder follows symlinked agent dirs (files.get_subdirectories),
+                    # so the signature must too or a symlinked profile change goes unnoticed.
+                    if not entry.is_dir(follow_symlinks=True):
+                        continue
+                    dir_mtime = entry.stat(follow_symlinks=True).st_mtime_ns
+                    link_target = os.path.realpath(entry.path) if entry.is_symlink() else ""
+                except OSError:
+                    continue
+                stamps = [entry.name, dir_mtime, link_target]
+                for filename in _AGENT_DEFINITION_FILES:
+                    try:
+                        stamps.append(os.stat(os.path.join(entry.path, filename)).st_mtime_ns)
+                    except OSError:
+                        stamps.append(-1)
+                entries.append(tuple(stamps))
+    except OSError:
+        return ()
+    return tuple(sorted(entries))
+
+
 def get_all_agents_list() -> list[dict[str, str]]:
+    global _agents_snapshot_cache
+
+    roots = get_agents_roots()
+    signature = tuple((root, _agents_root_signature(root)) for root in roots)
+    if _agents_snapshot_cache is not None and _agents_snapshot_cache[0] == signature:
+        return [dict(item) for item in _agents_snapshot_cache[1]]
+
+    result = _build_all_agents_list(roots)
+    _agents_snapshot_cache = (signature, result)
+    return [dict(item) for item in result]
+
+
+def _build_all_agents_list(roots: list[str]) -> list[dict[str, str]]:
     def _origin_from_root(root: str) -> Origin:
         rel = files.deabsolute_path(root).replace("\\", "/")
         if rel.startswith("usr/projects/"):
@@ -301,7 +373,7 @@ def get_all_agents_list() -> list[dict[str, str]]:
         return "default"
 
     merged: dict[str, SubAgentListItem] = {}
-    for root in get_agents_roots():
+    for root in roots:
         origin = _origin_from_root(root)
         items = _get_agents_list_from_dir(root, origin=origin)
         for name, item in items.items():
@@ -364,8 +436,14 @@ def get_paths(
         include_plugins,
         default_root,
     )
+    scope = _path_scope_var.get()
+    if scope is not None and cache_key in scope:
+        return scope[cache_key]
+
     cached = cache.get(PATHS_CACHE_AREA, cache_key)
     if cached is not None:
+        if scope is not None:
+            scope[cache_key] = cached
         return cached
 
     paths: list[str] = []
@@ -435,6 +513,8 @@ def get_paths(
             paths.append(path)
 
     cache.add(PATHS_CACHE_AREA, cache_key, paths)
+    if scope is not None:
+        scope[cache_key] = paths
     return paths
 
 

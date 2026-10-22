@@ -14,6 +14,7 @@
 
 ## Local Contracts
 
+- `helpers/memory.py` caches the embedding dimension per model namespace (`_embedding_dimension`) and computes the query embedding once per `delete_documents_by_query` call via `Memory.embed_query`, not per deletion batch.
 - Keep memory scoped by configured subdirectory/context.
 - Preserve embedding metadata needed to rebuild indexes safely.
 - Delayed recall results must survive `LoopData` replacement, stay scoped to the originating memory/profile/project, and be consumed once by the next prompt; do not persist live task objects into chat JSON.
@@ -32,6 +33,7 @@
 - Coordinate tool, prompt, and consolidation changes so saved memories remain useful and bounded.
 
 ## Verification
+
 
 - Smoke-test save, recall, delete, dashboard search/update, and knowledge import/reindex after changes.
 

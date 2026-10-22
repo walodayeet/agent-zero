@@ -83,6 +83,24 @@ class Record:
     def output_text(self, human_label="user", ai_label="ai"):
         return output_text(self.output(), ai_label, human_label)
 
+    def tail_text(self, max_chars: int, human_label="user", ai_label="ai") -> str:
+        """Return the last ``max_chars`` characters of ``output_text()``.
+
+        Serializes from the newest message backwards instead of rendering the whole
+        history, which matters for recall prompts on long conversations.
+        """
+        if max_chars <= 0:
+            return ""
+        pieces: list[str] = []
+        total = 0
+        for message in reversed(self.output()):
+            text = _stringify_output(message, ai_label, human_label)
+            total += len(text) + (1 if pieces else 0)
+            pieces.append(text)
+            if total >= max_chars:
+                break
+        return "\n".join(reversed(pieces))[-max_chars:]
+
 
 class Message(Record):
     def __init__(

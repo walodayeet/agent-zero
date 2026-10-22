@@ -21,6 +21,8 @@ USER_DIR = "usr"
 TEMP_DIR = "tmp"
 API_DIR = "api"
 _base_dir = os.path.dirname(os.path.abspath(os.path.join(__file__, "../")))
+_PROMPT_TEXT_CACHE: dict[tuple[str, int, int, str], str] = {}
+_PROMPT_TEXT_CACHE_LIMIT = 512
 
 class VariablesPlugin(ABC):
     @abstractmethod
@@ -120,6 +122,29 @@ def parse_file(
         return content
 
 
+def _read_cached_text(path: str, encoding: str) -> str:
+    """Read a prompt file, caching the raw text by file identity.
+
+    Placeholder/include expansion still happens per call; only the disk read and
+    decode are reused across prompt builds.
+    """
+    try:
+        stat = os.stat(path)
+        key = (path, stat.st_mtime_ns, stat.st_size, encoding)
+    except OSError:
+        with open(path, "r", encoding=encoding) as handle:
+            return handle.read()
+
+    cached = _PROMPT_TEXT_CACHE.get(key)
+    if cached is None:
+        with open(path, "r", encoding=encoding) as handle:
+            cached = handle.read()
+        if len(_PROMPT_TEXT_CACHE) >= _PROMPT_TEXT_CACHE_LIMIT:
+            _PROMPT_TEXT_CACHE.clear()
+        _PROMPT_TEXT_CACHE[key] = cached
+    return cached
+
+
 def read_prompt_file(
     _file: str, _directories: list[str] | None = None, _encoding="utf-8", **kwargs
 ):
@@ -136,9 +161,13 @@ def read_prompt_file(
     absolute_path = find_file_in_dirs(_file, _directories)
     source_dir = os.path.dirname(absolute_path)
 
-    # Read the file content
-    with open(absolute_path, "r", encoding=_encoding) as f:
-        content = f.read()
+    # Read the file content (raw text cached by file identity)
+    content = _read_cached_text(absolute_path, _encoding)
+
+    # Conditions, placeholders and includes all use the `{{ ... }}` syntax, so a
+    # file without it renders as-is: skip the three regex passes.
+    if "{{" not in content:
+        return content
 
     variables = load_plugin_variables(_file, _directories, **kwargs) or {}  # type: ignore
     variables.update(kwargs)
@@ -435,11 +464,7 @@ def find_existing_paths_by_pattern(pattern: str):
 
 def remove_code_fences(text, language: str | None = None):
     if language:
-        pattern = (
-            rf"(?ims)^[ \t]*(```|~~~)[ \t]*{re.escape(language)}[ \t]*\r?\n"
-            r"(.*?)^[ \t]*\1[ \t]*\r?$"
-        )
-        return re.sub(pattern, lambda match: match.group(2), text)
+        return _strip_language_fences(text, language)
 
     # Pattern to match code fences with optional language specifier
     pattern = r"(```|~~~)(.*?\n)(.*?)(\1)"
@@ -451,6 +476,43 @@ def remove_code_fences(text, language: str | None = None):
     # Use re.DOTALL to make '.' match newlines
     result = re.sub(pattern, replacer, text, flags=re.DOTALL)
 
+    return result
+
+
+def _strip_language_fences(text: str, language: str) -> str:
+    """Drop fences for one language without ever pairing across sections.
+
+    A regex that pairs the next closing marker with any opening one lets an
+    unterminated example swallow a later section's real closing fence (and the
+    content that followed it). Line-based state keeps such orphans harmless.
+    """
+    open_pattern = re.compile(
+        rf"^[ \t]*(```|~~~)[ \t]*{re.escape(language)}[ \t]*$", re.IGNORECASE
+    )
+    marker_pattern = re.compile(r"^[ \t]*(```|~~~)[ \t]*$")
+
+    output: list[str] = []
+    inside = False
+    fence = ""
+    for line in text.splitlines():
+        if not inside:
+            match = open_pattern.match(line)
+            if match:
+                inside = True
+                fence = match.group(1)
+                continue
+            output.append(line)
+            continue
+        match = marker_pattern.match(line)
+        if match and match.group(1) == fence:
+            inside = False
+            fence = ""
+            continue
+        output.append(line)
+
+    result = "\n".join(output)
+    if text.endswith("\n"):
+        result += "\n"
     return result
 
 

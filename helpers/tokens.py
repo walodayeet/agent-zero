@@ -1,3 +1,4 @@
+import hashlib
 import re
 from typing import Literal
 import tiktoken
@@ -8,11 +9,22 @@ EMBEDDED_IMAGE_DATA_PLACEHOLDER = "[embedded image data omitted from token estim
 _EMBEDDED_IMAGE_DATA_URL_PATTERN = re.compile(
     r"data:(image/[A-Za-z0-9.+-]+(?:;[A-Za-z0-9.+-]+=[A-Za-z0-9.+/=_-]+)*);base64,[A-Za-z0-9+/=_-]+"
 )
+_TOKEN_COUNT_CACHE: dict[tuple[bytes, bytes], int] = {}
+_TOKEN_COUNT_CACHE_LIMIT = 256
 
 
 def count_tokens(text: str, encoding_name="cl100k_base") -> int:
     if not text:
         return 0
+
+    # Prompt builds re-count the same large texts; hashing is far cheaper than encoding.
+    key = (
+        encoding_name.encode("ascii", "ignore"),
+        hashlib.blake2b(text.encode("utf-8", "surrogatepass"), digest_size=16).digest(),
+    )
+    cached = _TOKEN_COUNT_CACHE.get(key)
+    if cached is not None:
+        return cached
 
     # Get the encoding
     encoding = tiktoken.get_encoding(encoding_name)
@@ -20,6 +32,10 @@ def count_tokens(text: str, encoding_name="cl100k_base") -> int:
     # Encode the text and count the tokens
     tokens = encoding.encode(text, disallowed_special=())
     token_count = len(tokens)
+
+    if len(_TOKEN_COUNT_CACHE) >= _TOKEN_COUNT_CACHE_LIMIT:
+        _TOKEN_COUNT_CACHE.clear()
+    _TOKEN_COUNT_CACHE[key] = token_count
 
     return token_count
 

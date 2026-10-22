@@ -18,14 +18,16 @@
 - `get_skills_base_dir() -> Path`
 - `get_skill_roots(agent: Agent | None=...) -> List[str]`
 - `_is_hidden_path(path: Path) -> bool`
-- `discover_skill_md_files(root: Path) -> List[Path]`: Recursively discover SKILL.md files under a root directory.
+- `_pruned_dirnames(dirnames: List[str]) -> List[str]`
+- `_dir_signature(root: Path) -> tuple`
+- `discover_skill_md_files(root: Path) -> List[Path]`: Recursively discover SKILL.md files under a root directory with hidden/vendor pruning; results are cached per root until the walked directory set or any directory mtime changes.
 - `_coerce_list(value: Any) -> List[str]`
 - `_normalize_name(name: str) -> str`
 - `_read_text(path: Path) -> str`
 - `split_frontmatter(markdown: str) -> Tuple[Dict[str, Any], str, List[str]]`: Splits a SKILL.md into (frontmatter_dict, body_text, errors).
 - `_parse_frontmatter_fallback(frontmatter_text: str) -> Dict[str, Any]`
 - `parse_frontmatter(frontmatter_text: str) -> Tuple[Dict[str, Any], List[str]]`: Parse YAML frontmatter with PyYAML when available,
-- `skill_from_markdown(skill_md_path: Path, include_content: bool=..., validate: bool=...) -> Optional[Skill]`
+- `skill_from_markdown(skill_md_path: Path, include_content: bool=..., validate: bool=...) -> Optional[Skill]`: Frontmatter parses are cached by (path, mtime, size, validate) unless content is requested; callers should treat returned `Skill` objects as read-only.
 - `list_skills(agent: Agent | None=..., include_content: bool=..., include_hidden: bool=...) -> List[Skill]`: List skills, optionally filtered by agent scope.
 - `delete_skill(skill_path: str) -> None`: Delete a skill directory.
 - `find_skill(skill_name: str, agent: Agent | None=..., include_content: bool=..., include_hidden: bool=..., validate: bool=...) -> Optional[Skill]`
@@ -57,6 +59,8 @@
 
 ## Runtime Contracts
 
+- `list_skills()` caches the frontmatter-only listing (`_SKILL_LIST_CACHE`) by root set + per-file (path, mtime, size); the hidden-skill filter and dedupe still run per call. Requesting content bypasses the cache.
+- `discover_skill_md_files` caches per root against `(dirpath, mtime_ns)` of every walked directory (`_SKILL_DISCOVERY_CACHE`); `skill_from_markdown` caches parses by `(path, mtime_ns, size, validate)` (`_SKILL_PARSE_CACHE`). Creating or removing a skill directory invalidates discovery via the parent mtime; editing a SKILL.md invalidates only its parse.
 - `get_skill_roots` is extensible. Plugin end hooks may filter agent-scoped roots from current runtime state; do not mutate cached path lists. Global discovery without an agent retains installed roots. Listing, search, lookup, and skill reattachment use this resolver.
 
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.

@@ -7,6 +7,8 @@
 #   A0_DATA_DIR   user data directory (default ~/agent-zero/<instance>/usr)
 #   A0_INSTANCE   instance name for the default path (default agent-zero)
 #   A0_NO_ONBOARDING=1  skip the first-run data-directory prompt
+#   A0_PRELOAD_WAIT      seconds startup may block on the embedding warm-up (default 0 here)
+#   A0_PRELOAD=0         skip the embedding warm-up entirely (loads on first use)
 #   SEARXNG_URL   SearXNG JSON endpoint (default http://127.0.0.1:8888/search when present)
 #   ALLOWED_ORIGINS  extra CORS origins, appended to the derived local/host origins
 set -euo pipefail
@@ -18,6 +20,11 @@ export PATH="$PWD/.venv/bin:$PATH"
 export PLAYWRIGHT_BROWSERS_PATH="$PWD/tmp/playwright"
 export A0_PORT="${A0_PORT:-5000}"
 export A0_HOST="${A0_HOST:-127.0.0.1}"
+# Fast start: never block HTTP on the embedding warm-up, and skip the warm-up
+# itself unless A0_PRELOAD=1. The local embedding model then loads on first use
+# (~6s once per process, ~1.7GB RSS saved while it is unused).
+export A0_PRELOAD_WAIT="${A0_PRELOAD_WAIT:-0}"
+export A0_PRELOAD="${A0_PRELOAD:-0}"
 
 seed_usr() {
   mkdir -p "$1/agents" "$1/plugins" "$1/skills" "$1/knowledge" "$1/workdir" \

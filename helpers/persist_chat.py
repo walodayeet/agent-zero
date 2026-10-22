@@ -128,13 +128,53 @@ def mark_chat_saved(context: AgentContext) -> None:
     context.data[SAVED_CHAT_CONTEXT_DATA_KEY] = True
 
 
+_saved_chat_ids_cache: tuple[Any, set[str]] | None = None
+
+
 def saved_chat_ids() -> set[str]:
-    return {
+    """Chat folders that contain a chat file; cached until the chats dir changes."""
+    global _saved_chat_ids_cache
+
+    root = files.get_abs_path(CHATS_FOLDER)
+    try:
+        root_mtime: Any = os.stat(root).st_mtime_ns
+    except OSError:
+        root_mtime = None
+
+    # Root mtime alone misses a deleted/added chat file inside an existing folder.
+    children: list[tuple[str, int, int, int]] = []
+    if root_mtime is not None:
+        try:
+            with os.scandir(root) as iterator:
+                for entry in iterator:
+                    try:
+                        if not entry.is_dir(follow_symlinks=False):
+                            continue
+                        dir_mtime = entry.stat(follow_symlinks=False).st_mtime_ns
+                        chat_file = os.path.join(entry.path, CHAT_FILE_NAME)
+                        try:
+                            chat_stat = os.stat(chat_file)
+                            chat_stamp = (chat_stat.st_mtime_ns, chat_stat.st_size)
+                        except OSError:
+                            chat_stamp = (-1, -1)
+                        children.append((entry.name, dir_mtime, *chat_stamp))
+                    except OSError:
+                        continue
+        except OSError:
+            pass
+    signature: Any = (root_mtime, tuple(sorted(children)))
+
+    if _saved_chat_ids_cache is not None and _saved_chat_ids_cache[0] == signature:
+        return set(_saved_chat_ids_cache[1])
+
+    ids = {
         files.basename(files.dirname(path))
         for path in files.find_existing_paths_by_pattern(
             files.get_abs_path(CHATS_FOLDER, "*", CHAT_FILE_NAME)
         )
     }
+    _saved_chat_ids_cache = (signature, ids)
+    return set(ids)
 
 
 def _convert_v080_chats():

@@ -221,6 +221,28 @@ def call_development_function_sync(
     return cast(T, result)
 
 
+def preload_enabled() -> bool:
+    """A0_PRELOAD=0 keeps the embedding model out of startup (loaded on first use)."""
+    raw = str(dotenv.get_dotenv_value("A0_PRELOAD", "")).strip().lower()
+    return raw not in ("0", "false", "no", "off")
+
+
+def get_preload_wait_seconds() -> float:
+    """How long startup may block on the embedding warm-up.
+
+    Defaults to the documented 10s budget for every runtime; the bare-metal
+    launcher sets A0_PRELOAD_WAIT=0 so HTTP starts immediately while the warm-up
+    keeps running in the background.
+    """
+    raw = str(dotenv.get_dotenv_value("A0_PRELOAD_WAIT", "")).strip()
+    if raw:
+        try:
+            return max(0.0, float(raw))
+        except ValueError:
+            pass
+    return 10.0
+
+
 def get_web_ui_port():
     web_ui_port = (
         get_arg("port") or int(dotenv.get_dotenv_value("WEB_UI_PORT", 0)) or 5000

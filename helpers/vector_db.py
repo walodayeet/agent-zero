@@ -35,6 +35,7 @@ class MyFaiss(FAISS):
 class VectorDB:
 
     _cached_embeddings: dict[str, CacheBackedEmbeddings] = {}
+    _cached_dimensions: dict[str, int] = {}
 
     @staticmethod
     def _get_embeddings(agent: Agent, cache: bool = True):
@@ -61,7 +62,15 @@ class VectorDB:
         self.agent = agent
         self.cache = cache  # store cache preference
         self.embeddings = self._get_embeddings(agent, cache=cache)
-        self.index = faiss.IndexFlatIP(len(self.embeddings.embed_query("example")))
+        # Embedding one probe string per construction is a real model/API round-trip;
+        # cache the dimension per embedding namespace instead.
+        model = agent.get_embedding_model()
+        namespace = str(getattr(model, "model_name", None) or "default")
+        dimension = VectorDB._cached_dimensions.get(namespace)
+        if dimension is None:
+            dimension = len(self.embeddings.embed_query("example"))
+            VectorDB._cached_dimensions[namespace] = dimension
+        self.index = faiss.IndexFlatIP(dimension)
 
         self.db = MyFaiss(
             embedding_function=self.embeddings,

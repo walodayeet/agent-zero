@@ -96,11 +96,6 @@ def get_ui_asset_bundle(
 ) -> dict:
     """Build a versioned recursive text-asset bundle from the supplied entries."""
     entries = list(dict.fromkeys(entry_urls))
-    cache_key = _cache_key(entries)
-    cached = cache.get(_CACHE_AREA, cache_key)
-    if cached is not None:
-        return cached["bundle"]
-
     roots, extension_roots = _get_asset_roots(agent)
 
     # WebUI extension paths are injected into the rendered application document
@@ -119,6 +114,13 @@ def get_ui_asset_bundle(
                 entries.append(url)
 
     signature = _bundle_signature(roots, entries)
+    # Include the file signature in the cache key: keying on entry URLs alone served
+    # a stale bundle after any WebUI asset edit until the process restarted.
+    cache_key = _cache_key(entries) + "::" + signature
+    cached = cache.get(_CACHE_AREA, cache_key)
+    if cached is not None:
+        return cached["bundle"]
+
     result = _build_asset_bundle(entries, roots, signature)
     cache.add(
         _CACHE_AREA,

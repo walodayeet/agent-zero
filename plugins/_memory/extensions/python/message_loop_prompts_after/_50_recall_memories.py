@@ -158,7 +158,7 @@ class RecallMemories(Extension):
         user_instruction = (
             loop_data.user_message.output_text() if loop_data.user_message else "None"
         )
-        history = self.agent.history.output_text()[-set["memory_recall_history_len"]:]
+        history = self.agent.history.tail_text(set["memory_recall_history_len"])
         message = self.agent.read_prompt(
             "memory.memories_query.msg.md", history=history, message=user_instruction
         )

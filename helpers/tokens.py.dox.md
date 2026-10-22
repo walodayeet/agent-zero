@@ -16,10 +16,11 @@
 - `sanitize_embedded_image_data_urls(text: str) -> str`
 - `approximate_prompt_tokens(text: str) -> int`
 - `trim_to_tokens(text: str, max_tokens: int, direction: Literal['start', 'end'], ellipsis: str=...) -> str`
-- Notable constants/configuration names: `APPROX_BUFFER`, `TRIM_BUFFER`, `EMBEDDED_IMAGE_DATA_PLACEHOLDER`, `_EMBEDDED_IMAGE_DATA_URL_PATTERN`.
+- Notable constants/configuration names: `APPROX_BUFFER`, `TRIM_BUFFER`, `EMBEDDED_IMAGE_DATA_PLACEHOLDER`, `_EMBEDDED_IMAGE_DATA_URL_PATTERN`, `_TOKEN_COUNT_CACHE`.
 
 ## Runtime Contracts
 
+- `count_tokens` memoizes results by encoding + BLAKE2b text digest (256 entries). It only hits when the same text is counted twice; a prompt that changes every iteration still pays one full encode.
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Observed side-effect areas: secret handling.

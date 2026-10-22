@@ -108,8 +108,16 @@ def test_only_the_icon_guard_stylesheet_blocks_application_paint() -> None:
     assert index_html.count('<link rel="stylesheet"') == 1
     assert '<link rel="stylesheet" href="vendor/google/google-icons.css">' in index_html
     assert '<script type="module" src="/js/icons.js"></script>' in index_html
-    assert index_html.count('rel="preload" as="style"') == 20
-    assert index_html.count("onload=\"this.onload=null;this.rel='stylesheet'\"") == 20
+    assert index_html.count('rel="preload" as="style"') == 18
+    assert index_html.count("onload=\"this.onload=null;this.rel='stylesheet'\"") == 18
+    # Editor/KaTeX styles ship with their lazy vendor scripts, not with startup paint.
+    assert 'href="vendor/ace-min/ace.min.css"' not in index_html
+    assert 'href="vendor/katex/katex.min.css"' not in index_html
+    vendor_lazy = (PROJECT_ROOT / "webui" / "js" / "vendor-lazy.js").read_text(
+        encoding="utf-8"
+    )
+    assert "vendor/ace-min/ace.min.css" in vendor_lazy
+    assert "vendor/katex/katex.min.css" in vendor_lazy
     assert 'id="startup-splash"' not in index_html
     assert 'document.addEventListener("webui-bundle-loaded"' not in index_html
 
