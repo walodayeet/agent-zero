@@ -1,7 +1,7 @@
 from typing import Any
 
 from helpers.extension import Extension, extensible
-from helpers import skills as skills_helper, tool_policy
+from helpers import prompt_compact, skills as skills_helper, tool_policy
 from agent import Agent, LoopData
 
 
@@ -28,11 +28,7 @@ async def build_prompt(agent: Agent) -> str:
     available = skills_helper.list_skills(agent=agent)
     result: list[str] = []
     for skill in available:
-        name = skill.name.strip().replace("\n", " ")[:100]
-        descr = skill.description.replace("\n", " ").strip()
-        if len(descr) > 100:
-            descr = descr[:100].rstrip() + "..."
-        result.append(f"- {name}: {descr}" if descr else f"- {name}")
+        result.append(prompt_compact.skill_line(skill.name, skill.description))
 
     if not result:
         return ""

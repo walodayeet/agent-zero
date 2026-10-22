@@ -3,7 +3,7 @@ from typing import Any
 
 from helpers import responses_tools
 from helpers.extension import Extension, extensible
-from helpers import files, subagents, tool_policy
+from helpers import files, prompt_compact, subagents, tool_policy
 from helpers.print_style import PrintStyle
 from agent import Agent, LoopData
 
@@ -43,6 +43,8 @@ async def build_prompt(agent: Agent) -> str:
             basename = os.path.basename(tool_file)
             extra = all_tool_kwargs.get(basename, {})
             tool = agent.read_prompt(basename, **extra)
+            if prompt_compact.enabled():
+                tool = prompt_compact.compact_tool_prompt(tool)
             tool_prompts.append((basename, tool))
         except Exception as e:
             PrintStyle().error(f"Error loading tool '{tool_file}': {e}")

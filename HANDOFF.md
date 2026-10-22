@@ -66,8 +66,28 @@ Paste this file to the next agent maintaining this host/checkout.
   WebUI boot no longer blocks first paint on the ~3 MB service-worker bundle
   cache write: the app document is written immediately and the cache warms in the
   background (cold FCP 896-1408 ms -> 332-708 ms, DCL ~50 ms, same 250 assets).
-  The Browser tool's Chromium launch measures ~0.12 s; it is left running after
-  use, which is why it holds ~0.4 GB but makes later calls instant.
+  Prompt weight: the launchers set `A0_COMPACT_PROMPTS=1`. `helpers/prompt_compact.py`
+  drops fenced tool examples, keeps the heading/description/arguments (350 chars
+  per tool), lists skills by name only, and caps the workdir tree at 60 lines.
+  The agent0 prompt drops from 19,892 to ~6,500 tokens (system_tools 10.4k -> 2.4k,
+  skills 5.5k -> 1.6k), which is where most of the per-turn gain now comes from.
+  `A0_COMPACT_PROMPTS=0` restores the full prompt; tests run with it unset and
+  `tests/test_prompt_compact.py` covers the compactor.
+
+## Hermes head-to-head (same host, same gateway/model)
+- Hermes uses `%LOCALAPPDATA%\hermes` on Windows (not `~/.hermes`). Its
+  `config.yaml` has `model: {default: deepseek-v4.1-flash, provider: cliproxy,
+  base_url: http://127.0.0.1:20301/v1}` and a `providers.cliproxy` entry with
+  `key_env: CLIPROXY_API_KEY`; the key lives in that home's `.env`.
+- Protocol: one warm-up + five measured runs per task; Agent Zero measured over
+  `api/message_async` with a fresh context and the turn's response log entry,
+  Hermes via `hermes -z "<prompt>" --yolo` (process start included). Model and
+  gateway identical for both.
+- Medians (2026-10-23): simple reply A0 2.20 s vs Hermes 6.41 s (2.9x); terminal
+  tool A0 3.39 s vs 8.20 s (2.4x); three-sentence answer A0 3.01 s vs 6.78 s
+  (2.3x). Agent Zero's footprint ~690 MB vs Hermes ~0.27-0.29 GB per CLI run.
+- Responses API (`a0_api_mode: responses`) was tried and reverted: 8.9-13.3 s per
+  simple turn on this gateway, slower than chat completions.
   With the ONNX embedding backend (`A0_EMBEDDING_BACKEND=onnx`, default in both
   launchers) and the vector-store warm-up in the same background preload, the
   server settles at ~500 MB idle and ~690 MB after a turn (commit ~3.5-3.7 GB):
