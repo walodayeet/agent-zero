@@ -24,7 +24,11 @@ Paste this file to the next agent maintaining this host/checkout.
   `helpers/files.fsync_directory` (no-op on Windows; a directory cannot be opened
   as a descriptor), `os.geteuid` guards in the Desktop/Office package hooks, and
   a tolerant `fcntl` import in `plugins/_desktop/helpers/desktop_session.py`
-  (used only by the generated Linux bridge scripts).
+  (used only by the generated Linux bridge scripts). The full suite runs green on
+  Windows as well: `pytest tests` -> 2274 passed, 22 skipped (POSIX-only
+  Desktop/Xpra/apt/unix-socket cases), matching the Linux count once its
+  POSIX-only skips are removed. `tests/conftest.py` points Playwright at the
+  installer's `tmp/playwright` cache so the DOM regressions run without env setup.
 - Core cross-platform bits: `/a0` mapping uses `os.path`; code execution uses
   `powershell.exe` + pywinpty on Windows; `find_soffice` checks app-bundle and
   Program Files paths.

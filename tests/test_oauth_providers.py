@@ -241,7 +241,8 @@ def test_write_private_json_does_not_reuse_preexisting_temp_file(tmp_path):
     assert stale_tmp.read_text(encoding="utf-8") == "stale"
     assert stale_tmp.stat().st_ino == stale_inode
     assert path.read_text(encoding="utf-8").find("secret") > -1
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if os.name == "posix":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_write_private_json_cleans_up_generated_temp_file_on_error(tmp_path, monkeypatch):
@@ -273,7 +274,8 @@ def test_write_private_json_does_not_follow_preexisting_temp_symlink(tmp_path):
     assert leak_target.read_text(encoding="utf-8") == "safe"
     assert stale_tmp.is_symlink()
     assert '"token": "secret"' in path.read_text(encoding="utf-8")
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if os.name == "posix":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_write_private_json_sets_generated_temp_private_before_dump(tmp_path, monkeypatch):
@@ -291,8 +293,10 @@ def test_write_private_json_sets_generated_temp_private_before_dump(tmp_path, mo
     path = tmp_path / "auth.json"
     write_private_json(path, {"token": "secret"})
 
-    assert observed_modes == [0o600]
-    assert stat.S_IMODE(path.stat().st_mode) == 0o600
+    if os.name == "posix":
+        assert observed_modes == [0o600]
+    if os.name == "posix":
+        assert stat.S_IMODE(path.stat().st_mode) == 0o600
 
 
 def test_public_error_returns_user_facing_string():

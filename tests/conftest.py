@@ -7,6 +7,21 @@ import pytest
 _PLAYWRIGHT_ENV_KEY = "PLAYWRIGHT_BROWSERS_PATH"
 
 
+@pytest.fixture(scope="session", autouse=True)
+def _repo_playwright_browsers():
+    """Use the repo browser cache installed by the bare-metal installer.
+
+    Without it the DOM tests would have to be pointed at the cache by hand on
+    hosts that do not symlink it into the Playwright default location.
+    """
+    if os.environ.get(_PLAYWRIGHT_ENV_KEY):
+        return
+    repo_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    candidate = os.path.join(repo_root, "tmp", "playwright")
+    if os.path.isdir(candidate):
+        os.environ[_PLAYWRIGHT_ENV_KEY] = candidate
+
+
 @pytest.fixture(autouse=True)
 def _restore_playwright_browsers_path():
     """Production code may point the Playwright cache at the A0 runtime dir.

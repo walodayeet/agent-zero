@@ -2,6 +2,7 @@
 
 import asyncio
 import json
+import os
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -158,8 +159,10 @@ def test_project_profile_and_user_overrides_stay_ahead_of_plugin_assets(
         context=SimpleNamespace(get_data=lambda key: "demo" if key == "project" else None),
     )
 
-    assert subagents.get_paths(agent, "prompts", "memory.md") == [
-        *overrides, str(user / "prompts/memory.md"), str(bundled / "prompts/memory.md")
+    assert [Path(path) for path in subagents.get_paths(agent, "prompts", "memory.md")] == [
+        *(Path(path) for path in overrides),
+        user / "prompts/memory.md",
+        bundled / "prompts/memory.md",
     ]
     assert Agent.read_prompt(agent, "memory.md") == directories[0]
 
@@ -335,7 +338,9 @@ def test_profile_settings_merge_preserves_root_and_scope_priorities(
     project_profile.write_text("[]", encoding="utf-8")
     assert_settings("project", "_zulu")
     assert len(errors) == 1 and errors[0]["type"] == "error"
-    assert str(project_profile) in errors[0]["content"]
+    # Framework paths may mix separators on Windows; compare canonical forms.
+    logged = os.path.normcase(errors[0]["content"]).replace("/", os.sep)
+    assert os.path.normcase(str(project_profile)) in logged
 
 
 def test_model_prompt_native_schema_and_dispatch_use_the_same_plugin(

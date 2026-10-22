@@ -727,7 +727,7 @@ def normalize_a0_path(path: str):
     "Convert absolute paths into /a0/... paths"
     if is_in_base_dir(path):
         deabs = deabsolute_path(path)
-        return "/a0/" + deabs
+        return "/a0/" + deabs.replace(os.sep, "/")
     # `usr` can be a junction/symlink outside the checkout (bare-metal data dir),
     # so paths resolved through it no longer sit under the base dir.
     usr_real = _real_usr_dir()

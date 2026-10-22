@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import os
 import multiprocessing
 import queue
 import stat
@@ -909,7 +910,8 @@ def test_write_auth_file_uses_atomic_replace_and_private_permissions(tmp_path, m
     assert json.loads(auth_path.read_text(encoding="utf-8")) == {
         "tokens": {"refresh_token": "refresh"}
     }
-    assert stat.S_IMODE(auth_path.stat().st_mode) == 0o600
+    if os.name == "posix":
+        assert stat.S_IMODE(auth_path.stat().st_mode) == 0o600
     assert len(replacements) == 1
     assert replacements[0][0] != auth_path
     assert replacements[0][1] == auth_path
@@ -930,7 +932,8 @@ def test_write_auth_file_falls_back_for_file_bind_mount(tmp_path, monkeypatch):
     assert json.loads(auth_path.read_text(encoding="utf-8")) == {
         "tokens": {"refresh_token": "refresh-1"}
     }
-    assert stat.S_IMODE(auth_path.stat().st_mode) == 0o600
+    if os.name == "posix":
+        assert stat.S_IMODE(auth_path.stat().st_mode) == 0o600
     assert list(tmp_path.glob(".auth.json.*.tmp")) == []
 
 
@@ -951,7 +954,8 @@ def test_write_auth_file_falls_back_when_parent_rejects_temporary_files(tmp_path
     assert json.loads(auth_path.read_text(encoding="utf-8")) == {
         "tokens": {"refresh_token": "refresh-1"}
     }
-    assert stat.S_IMODE(auth_path.stat().st_mode) == 0o600
+    if os.name == "posix":
+        assert stat.S_IMODE(auth_path.stat().st_mode) == 0o600
     assert not auth_path.with_name(".auth.json.lock").exists()
 
 

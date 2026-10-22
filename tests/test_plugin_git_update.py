@@ -59,7 +59,7 @@ def make_plugin_repos(tmp_path: Path) -> tuple[Path, Path, Path]:
 
 
 def push_source_change(source: Path, path: str, content: str) -> None:
-    (source / path).write_text(content, encoding="utf-8")
+    (source / path).write_text(content, encoding="utf-8", newline="\n")
     run_git(source, "add", path)
     run_git(source, "commit", "-m", f"update {path}")
     run_git(source, "push")
