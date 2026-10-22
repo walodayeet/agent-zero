@@ -25,6 +25,9 @@ export A0_HOST="${A0_HOST:-127.0.0.1}"
 # (~6s once per process, ~1.7GB RSS saved while it is unused).
 export A0_PRELOAD_WAIT="${A0_PRELOAD_WAIT:-0}"
 export A0_PRELOAD="${A0_PRELOAD:-0}"
+# Local embeddings through onnxruntime instead of torch (~-400 MB RSS, ~-9 s load;
+# vectors are identical). Set A0_EMBEDDING_BACKEND=st to use sentence-transformers.
+export A0_EMBEDDING_BACKEND="${A0_EMBEDDING_BACKEND:-onnx}"
 
 seed_usr() {
   mkdir -p "$1/agents" "$1/plugins" "$1/skills" "$1/knowledge" "$1/workdir" \

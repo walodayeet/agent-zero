@@ -53,6 +53,12 @@ Paste this file to the next agent maintaining this host/checkout.
   The `run-baremetal.ps1` wrapper adds ~140 MB, each open terminal session adds a
   PowerShell process (~75 MB), and the first Browser-tool use leaves a Chromium
   plus its node driver alive (~0.4 GB) until it is closed.
+  With the ONNX embedding backend (`A0_EMBEDDING_BACKEND=onnx`, default in both
+  launchers) those numbers drop to ~520 MB idle/after warm-up and ~740 MB after a
+  turn (commit ~3.8 GB), because torch/transformers are never imported: the
+  embedding model loads in ~1.7 s instead of ~10 s and vectors are identical to
+  sentence-transformers (max abs diff < 2e-7). `sentence-transformers` remains the
+  fallback when onnxruntime or the model files are missing.
 - Core cross-platform bits: `/a0` mapping uses `os.path`; code execution uses
   `powershell.exe` + pywinpty on Windows; `find_soffice` checks app-bundle and
   Program Files paths.

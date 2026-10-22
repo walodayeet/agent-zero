@@ -1,5 +1,6 @@
 import os
 import platform
+import re
 import select
 import subprocess
 import time
@@ -8,6 +9,8 @@ from typing import Optional, Tuple
 from helpers import runtime
 from plugins._code_execution.helpers import tty_session
 from plugins._code_execution.helpers.shell_ssh import clean_string
+
+_PROMPT_RE = re.compile(r"(?:PS\s+[^>]*>|[$#])\s*$")
 
 
 def disable_pagers_in_env(env: dict | None = None) -> dict:
@@ -45,7 +48,26 @@ class LocalInteractiveSession:
             env=disable_pagers_in_env(),
         )
         await self.session.start()
-        await self.session.read_full_until_idle(idle_timeout=1, total_timeout=1)
+        await self._wait_for_prompt()
+
+    async def _wait_for_prompt(self, timeout: float = 8.0) -> None:
+        """Drain the shell banner until its prompt is ready.
+
+        PowerShell needs ~1.5 s to initialise PSReadLine on Windows; a command
+        sent before that waits for the shell to catch up (measured ~2.3 s for a
+        first ``echo``). Return as soon as a prompt line appears, or fall back to
+        the old idle drain.
+        """
+        buffer = ""
+        deadline = time.monotonic() + timeout
+        while time.monotonic() < deadline:
+            chunk = await self.session.read(timeout=0.25)
+            if chunk is None:
+                continue
+            buffer = (buffer + chunk)[-4000:]
+            lines = [line.strip() for line in buffer.splitlines()[-3:]]
+            if any(_PROMPT_RE.search(line) for line in lines):
+                return
 
     async def close(self):
         if self.session:

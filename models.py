@@ -881,6 +881,12 @@ _LOCAL_EMBEDDING_MODELS: dict[tuple[str, str], "SentenceTransformer"] = {}
 _LOCAL_EMBEDDING_MODELS_LOCK = threading.Lock()
 
 
+def _embedding_backend() -> str:
+    from helpers import dotenv
+
+    return str(dotenv.get_dotenv_value("A0_EMBEDDING_BACKEND", "") or "").strip().lower()
+
+
 def _get_local_embedding_model(
     model: str, kwargs: dict[str, Any]
 ) -> "SentenceTransformer":
@@ -888,9 +894,25 @@ def _get_local_embedding_model(
     with _LOCAL_EMBEDDING_MODELS_LOCK:
         cached = _LOCAL_EMBEDDING_MODELS.get(key)
         if cached is None:
-            from sentence_transformers import SentenceTransformer
+            cached = None
+            if _embedding_backend() == "onnx":
+                try:
+                    import helpers.onnx_embeddings as onnx_embeddings
 
-            cached = SentenceTransformer(model, **kwargs)
+                    cached = onnx_embeddings.OnnxSentenceTransformer(model, **kwargs)
+                    from helpers.print_style import PrintStyle
+
+                    PrintStyle.standard(f"Local embeddings via onnxruntime: {model}")
+                except Exception as exc:
+                    from helpers.print_style import PrintStyle
+
+                    PrintStyle.warning(
+                        f"ONNX embedding backend unavailable ({exc}); using sentence-transformers."
+                    )
+            if cached is None:
+                from sentence_transformers import SentenceTransformer
+
+                cached = SentenceTransformer(model, **kwargs)
             _LOCAL_EMBEDDING_MODELS.clear()
             _LOCAL_EMBEDDING_MODELS[key] = cached
         return cached

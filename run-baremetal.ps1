@@ -15,6 +15,9 @@ $env:PLAYWRIGHT_BROWSERS_PATH = if ($env:PLAYWRIGHT_BROWSERS_PATH) { $env:PLAYWR
 # lazy and saves ~1.7GB RSS while unused).
 $env:A0_PRELOAD_WAIT = if ($env:A0_PRELOAD_WAIT) { $env:A0_PRELOAD_WAIT } else { "0" }
 $env:A0_PRELOAD = if ($env:A0_PRELOAD) { $env:A0_PRELOAD } else { "1" }
+# Local embeddings through onnxruntime instead of torch (-~400 MB RSS, ~-9 s load).
+# Vectors are identical to sentence-transformers; set A0_EMBEDDING_BACKEND=st to disable.
+$env:A0_EMBEDDING_BACKEND = if ($env:A0_EMBEDDING_BACKEND) { $env:A0_EMBEDDING_BACKEND } else { "onnx" }
 
 # Local gateways must bypass any proxy.
 $loopbackNoProxy = "localhost,127.0.0.1,::1,host.docker.internal"
