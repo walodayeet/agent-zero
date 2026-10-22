@@ -52,7 +52,12 @@ Paste this file to the next agent maintaining this host/checkout.
   ~0.8-1.0 GB, with commit charge 2-5 GB because torch/faiss reserve arenas.
   The `run-baremetal.ps1` wrapper adds ~140 MB, each open terminal session adds a
   PowerShell process (~75 MB), and the first Browser-tool use leaves a Chromium
-  plus its node driver alive (~0.4 GB) until it is closed.
+  plus its node driver alive (~0.4 GB) until it is closed. The terminal prefers
+  `pwsh` when installed (the installer adds Microsoft.PowerShell): Windows
+  PowerShell 5.1 rejects the bash-style `&&` the agent writes, and each retry
+  costs a whole model turn. pwsh starts in ~3.7 s versus ~3.3 s for 5.1; the
+  readiness barrier in `shell_local.connect()` hides that behind the first model
+  call, and commands return in ~0.1-0.2 s afterwards.
   With the ONNX embedding backend (`A0_EMBEDDING_BACKEND=onnx`, default in both
   launchers) and the vector-store warm-up in the same background preload, the
   server settles at ~500 MB idle and ~690 MB after a turn (commit ~3.5-3.7 GB):

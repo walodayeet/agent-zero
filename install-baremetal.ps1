@@ -72,6 +72,7 @@ if (-not $NoSystemPackages) {
             "BurntSushi.ripgrep.MSVC",
             "jqlang.jq",
             "OpenJS.NodeJS.LTS",
+            "Microsoft.PowerShell",
             "7zip.7zip"
         )
         foreach ($package in $core) {

@@ -275,6 +275,10 @@ def is_windows():
 
 def get_terminal_executable():
     if is_windows():
-        return "powershell.exe"
+        # PowerShell 7 starts ~3x faster than Windows PowerShell 5.1 and supports
+        # the bash-style `&&` the agent writes; use it when installed.
+        import shutil
+
+        return shutil.which("pwsh") or "powershell.exe"
     else:
         return "/bin/bash"

@@ -361,9 +361,10 @@ async def _spawn_posix_pty(cmd, cwd, env, echo):
 
 async def _spawn_winpty(cmd, cwd, env, echo):
     # Clean PowerShell startup: no logo, no profile, bypass execution policy for deterministic behavior
-    if cmd.strip().lower().startswith("powershell"):
+    executable = os.path.basename(cmd.strip().split()[0]).lower() if cmd.strip() else ""
+    if executable in ("powershell.exe", "powershell", "pwsh.exe", "pwsh"):
         if "-nolog" not in cmd.lower():
-            cmd = cmd.replace("powershell.exe", "powershell.exe -NoLogo -NoProfile -ExecutionPolicy Bypass", 1)
+            cmd = f"{cmd} -NoLogo -NoProfile -ExecutionPolicy Bypass"
 
     cols, rows = 80, 25
     child = winpty.PtyProcess.spawn(cmd, dimensions=(rows, cols), cwd=cwd or os.getcwd(), env=env) # type: ignore
