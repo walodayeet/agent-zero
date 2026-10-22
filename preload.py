@@ -34,6 +34,20 @@ async def preload():
         PrintStyle().error(f"Error in preload: {e}")
 
 
+async def warmup_llm():
+    """Import LiteLLM off the event loop, in its own deferred task.
+
+    Kept separate from ``preload()`` so the embedding/vector-store task still
+    completes (and reports readiness) without waiting for the LLM stack.
+    """
+    try:
+        from helpers import litellm_transport
+
+        await asyncio.to_thread(litellm_transport.warmup)
+    except Exception:
+        pass
+
+
 # preload the configured embedding model
 if __name__ == "__main__":
     PrintStyle().print("Running preload...")

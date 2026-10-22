@@ -30,6 +30,15 @@ def _litellm() -> Any:
     return _LITELLM_MODULE
 
 
+def warmup() -> None:
+    """Import LiteLLM (and its HTTP stack) ahead of the first chat turn.
+
+    The import costs 2-4 s; doing it in the background preload keeps the first
+    user message from paying it while the model is already streaming.
+    """
+    _litellm()
+
+
 # Thin lazy bindings: same call shapes the module used to import eagerly.
 def completion(*args: Any, **kwargs: Any) -> Any:
     return _litellm().completion(*args, **kwargs)

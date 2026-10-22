@@ -66,12 +66,20 @@ def initialize_job_loop():
     from helpers.job_loop import run_loop
     return defer.DeferredTask("JobLoop").start_task(run_loop)
 
+_llm_warmup_task = None
+
+
 @extension.extensible
 def initialize_preload():
+    global _llm_warmup_task
     if not runtime.preload_enabled():
         PrintStyle().print("Embedding preload disabled (A0_PRELOAD=0); loading on first use.")
         return None
     import preload
+    if _llm_warmup_task is None:
+        # Separate task: importing LiteLLM must not delay the embedding/vector
+        # store readiness that startup (and tests) wait on.
+        _llm_warmup_task = defer.DeferredTask().start_task(preload.warmup_llm)
     return defer.DeferredTask().start_task(preload.preload)
 
 @extension.extensible
