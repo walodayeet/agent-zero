@@ -134,27 +134,6 @@
                 )
             }
 
-            const waitForController = (expectedUrl) => {
-                if (navigator.serviceWorker.controller?.scriptURL === expectedUrl) {
-                    return Promise.resolve(navigator.serviceWorker.controller)
-                }
-                return withTimeout(new Promise((resolve) => {
-                    const onControllerChange = () => {
-                        const controller = navigator.serviceWorker.controller
-                        if (controller?.scriptURL !== expectedUrl) return
-                        navigator.serviceWorker.removeEventListener(
-                            "controllerchange",
-                            onControllerChange,
-                        )
-                        resolve(controller)
-                    }
-                    navigator.serviceWorker.addEventListener(
-                        "controllerchange",
-                        onControllerChange,
-                    )
-                }), ACTIVATION_TIMEOUT_MS, "Service worker control")
-            }
-
             const sendBundle = (worker, bundle, waitForReady) => {
                 if (!waitForReady) {
                     return Promise.resolve().then(() => {
@@ -215,16 +194,17 @@
                     updateViaCache: "none",
                 })
                 const worker = await waitForExpectedWorker(registration, expectedUrl)
-                await sendBundle(worker, bundle, true)
-                await waitForController(expectedUrl)
+                // Warm the service-worker cache in the background. The backend
+                // serves the same files, so first paint does not wait for ~3 MB of
+                // cache writes; the app document is written immediately below.
+                sendBundle(worker, bundle, false).catch(() => undefined)
             }
 
-            initialize()
-                .catch((error) => console.warn("WebUI bootstrap cache unavailable.", error))
-                .finally(() => {
-                    clearTimeout(fallbackTimer)
-                    replaceWithApp().catch(reportAppLoadFailure)
-                })
+            initialize().catch((error) =>
+                console.warn("WebUI bootstrap cache unavailable.", error),
+            )
+            clearTimeout(fallbackTimer)
+            replaceWithApp().catch(reportAppLoadFailure)
         })()
     </script>
 </body>

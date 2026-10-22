@@ -1,5 +1,6 @@
 import asyncio
 import errno
+import os
 from dataclasses import dataclass
 import re
 import shlex
@@ -13,6 +14,7 @@ from helpers.messages import truncate_text as truncate_text_agent
 from helpers import plugins
 
 from plugins._code_execution.helpers.shell_local import LocalInteractiveSession
+from plugins._code_execution.helpers import shell_pool
 from plugins._code_execution.helpers.shell_ssh import SSHInteractiveSession
 
 
@@ -165,14 +167,21 @@ class CodeExecution(Tool):
                     cwd=cwd,
                 )
             else:
+                shell = await shell_pool.take_prewarmed(cwd)
+
+            adopted = shell is not None
+            if shell is None:
                 shell = LocalInteractiveSession(cwd=cwd)
 
             shells[session] = ShellWrap(id=session, session=shell, running=False)
             try:
-                await shell.connect()
+                if not adopted:
+                    await shell.connect()
             except BaseException:
                 await shell.close()
                 raise
+            # Keep one spare connecting for the next chat while this session lives.
+            shell_pool.ensure_prewarm(cwd)
 
         self.state = State(shells=shells, ssh_enabled=ssh_enabled)
         self.agent.set_data("_cet_state", self.state)
@@ -555,6 +564,11 @@ class CodeExecution(Tool):
         if runtime.is_local_runtime():
             # bare metal: the host path is the real path, /a0/... is only a display prefix
             local = files.fix_dev_path(path)
+            if runtime.is_windows() and not os.path.splitdrive(local)[0]:
+                # A POSIX-style path (copied from a Linux checkout) has no drive
+                # here; keep the agent inside the install's workdir instead of
+                # creating C:\home\... .
+                local = files.get_abs_path("usr", "workdir")
             await runtime.call_development_function(make_dir, local)
             return local
 

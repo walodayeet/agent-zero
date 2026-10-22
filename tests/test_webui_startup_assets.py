@@ -51,7 +51,11 @@ def test_splash_prepares_worker_before_replacing_document_in_place() -> None:
     assert 'const APP_DOCUMENT_PATH = "/ui/index"' in splash_html
     assert "const appDocumentPromise = fetch(APP_DOCUMENT_PATH" in splash_html
     assert 'navigator.serviceWorker.register(expectedUrl' in splash_html
-    assert "await sendBundle(worker, bundle, true)" in splash_html
+    assert "sendBundle(worker, bundle, false)" in splash_html
+    assert "await sendBundle(worker, bundle, true)" not in splash_html
+    # First paint must not wait for the service-worker cache warm-up.
+    assert "initialize().catch(" in splash_html
+    assert "replaceWithApp().catch(reportAppLoadFailure)" in splash_html
     assert 'const overlay = document.getElementById("startup-transition")' in splash_html
     assert 'overlay.dataset.theme = "light"' in splash_html
     assert "(bodyTag) => bodyTag + overlay.outerHTML" in splash_html

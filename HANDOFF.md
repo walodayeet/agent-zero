@@ -57,7 +57,17 @@ Paste this file to the next agent maintaining this host/checkout.
   PowerShell 5.1 rejects the bash-style `&&` the agent writes, and each retry
   costs a whole model turn. pwsh starts in ~3.7 s versus ~3.3 s for 5.1; the
   readiness barrier in `shell_local.connect()` hides that behind the first model
-  call, and commands return in ~0.1-0.2 s afterwards.
+  A spare shell is connected on the shared AgentContext loop when the server
+  becomes healthy and after each adoption (`plugins/_code_execution/helpers/
+  shell_pool.py`), so a new chat's first command normally runs in ~0.1-0.3 s
+  instead of waiting ~3 s for PowerShell. `A0_TERMINAL_PREWARM=0` disables it.
+  Workdir settings that still point at a POSIX path (copied from a Linux
+  checkout) fall back to `usr/workdir` on Windows instead of creating `C:\home\`.
+  WebUI boot no longer blocks first paint on the ~3 MB service-worker bundle
+  cache write: the app document is written immediately and the cache warms in the
+  background (cold FCP 896-1408 ms -> 332-708 ms, DCL ~50 ms, same 250 assets).
+  The Browser tool's Chromium launch measures ~0.12 s; it is left running after
+  use, which is why it holds ~0.4 GB but makes later calls instant.
   With the ONNX embedding backend (`A0_EMBEDDING_BACKEND=onnx`, default in both
   launchers) and the vector-store warm-up in the same background preload, the
   server settles at ~500 MB idle and ~690 MB after a turn (commit ~3.5-3.7 GB):

@@ -367,6 +367,25 @@ def _run_server_attempt(
         flush_callback("server_exit")
 
 
+def _prewarm_terminal() -> None:
+    """Connect a spare shell on the agent loop once the server is live.
+
+    Called from the health watchdog (production only), never from unit tests.
+    """
+    try:
+        from helpers import defer
+        from plugins._code_execution.helpers import shell_pool
+
+        if not shell_pool.enabled():
+            return
+        # Agents run on the shared "AgentContext" loop (see AgentContext.run_task),
+        # so the spare must be created there to be adoptable.
+        loop = defer.EventLoopThread("AgentContext")
+        loop.run_coroutine(shell_pool.prewarm_on_current_loop())
+    except Exception:
+        pass
+
+
 def wait_for_health(host: str, port: int, startup_monitor: StartupMonitor) -> None:
     url = f"http://{host}:{port}/api/health"
     while not startup_monitor.stop_event().is_set():
@@ -375,6 +394,7 @@ def wait_for_health(host: str, port: int, startup_monitor: StartupMonitor) -> No
                 if resp.status == 200:
                     startup_monitor.mark_ready("health_probe")
                     PrintStyle().print("Agent Zero is running.")
+                    _prewarm_terminal()
                     return
         except Exception:
             pass

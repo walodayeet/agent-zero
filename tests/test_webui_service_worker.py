@@ -58,7 +58,8 @@ def test_splash_registers_root_cache_without_frontend_loader_hooks() -> None:
     assert 'updateViaCache: "none"' in splash
     assert "preload-ui-bundle" in splash
     assert "new MessageChannel()" in splash
-    assert "await sendBundle(worker, bundle, true)" in splash
+    assert "sendBundle(worker, bundle, false)" in splash
+    assert "await sendBundle(worker, bundle, true)" not in splash
     assert "webuiComponentCache" not in components
     assert "preload-ui-bundle" not in components
     assert "preload-ui-bundle" not in extensions
