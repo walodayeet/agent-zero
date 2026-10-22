@@ -106,7 +106,7 @@ def test_file_browser_can_register_runtime_root_markdown(office_state, monkeypat
     runtime_root = office_state.state.parent / "runtime-root"
     runtime_root.mkdir()
     path = runtime_root / "AGENTS.md"
-    path.write_text("# Runtime Instructions\n", encoding="utf-8")
+    path.write_text("# Runtime Instructions\n", encoding="utf-8", newline="\n")
     monkeypatch.setattr(document_store.files, "get_base_dir", lambda: str(runtime_root))
 
     with pytest.raises(PermissionError, match="active project or workdir"):
@@ -138,7 +138,7 @@ def test_editor_file_browser_source_opens_runtime_root_markdown(office_state, mo
     runtime_root = office_state.state.parent / "runtime-root"
     runtime_root.mkdir()
     path = runtime_root / "AGENTS.md"
-    path.write_text("# Runtime Instructions\n", encoding="utf-8")
+    path.write_text("# Runtime Instructions\n", encoding="utf-8", newline="\n")
     monkeypatch.setattr(document_store.files, "get_base_dir", lambda: str(runtime_root))
     handler = EditorSession(app=None, thread_lock=None)
     request = types.SimpleNamespace(headers={}, host_url="http://localhost/")
@@ -152,7 +152,7 @@ def test_editor_file_browser_source_opens_runtime_root_markdown(office_state, mo
 
     assert blocked["ok"] is False
     assert "active project or workdir" in blocked["error"]
-    assert opened["ok"] is True
+    assert opened["ok"] is True, opened.get("error")
     assert opened["title"] == "AGENTS.md"
     assert opened["text"] == "# Runtime Instructions\n"
 
@@ -565,7 +565,8 @@ def test_native_office_rename_preserves_unsaved_content_and_metadata(office_stat
 
     assert not source.exists()
     assert target.read_bytes() == dirty
-    assert stat.S_IMODE(target.stat().st_mode) == 0o640
+    if os.name == "posix":
+        assert stat.S_IMODE(target.stat().st_mode) == 0o640
     assert (target.stat().st_uid, target.stat().st_gid) == (metadata.st_uid, metadata.st_gid)
     assert updated["file_id"] == doc["file_id"]
     assert updated["version"] == doc["version"] + 1
@@ -685,7 +686,7 @@ def test_refresh_open_markdown_session_reloads_external_file_edits(office_state)
     doc = document_store.create_document("document", "External Refresh", "md", "First")
     session = manager.open(doc, context_id="ctx-a")
 
-    Path(doc["path"]).write_text("# External Refresh\n\nSecond\n", encoding="utf-8")
+    Path(doc["path"]).write_text("# External Refresh\n\nSecond\n", encoding="utf-8", newline="\n")
     refreshed = manager.open(doc, context_id="ctx-a", refresh=True)
 
     assert refreshed["session_id"] == session["session_id"]
@@ -711,7 +712,7 @@ def test_external_text_editor_mutation_refreshes_clean_open_markdown_session(off
     doc = document_store.create_document("document", "Synced External Edit", "md", "First")
     session = manager.open(doc, context_id="ctx-a")
 
-    Path(doc["path"]).write_text("# Synced External Edit\n\nSecond\n", encoding="utf-8")
+    Path(doc["path"]).write_text("# Synced External Edit\n\nSecond\n", encoding="utf-8", newline="\n")
     result = manager.sync_external_file_mutations([doc["path"]])
 
     assert result["matched"] == 1
@@ -910,6 +911,7 @@ def test_office_binary_open_requires_explicit_desktop_without_cold_session(offic
         monkeypatch.delattr(api_package, "office_session", raising=False)
 
 
+@pytest.mark.skipif(os.name != "posix", reason="XFCE desktop profile")
 def test_official_desktop_session_manager_opens_binary_session(office_state, tmp_path, monkeypatch):
     class FakeProcess:
         pid = 4242
@@ -997,7 +999,7 @@ def test_official_desktop_session_manager_opens_binary_session(office_state, tmp
     for link_name, target in link_targets.items():
         link = tmp_path / "desktop" / "profiles" / payload["session_id"] / "Desktop" / link_name
         assert link.is_symlink()
-        assert str(link.resolve()).endswith(target)
+        assert link.resolve() == (office_state.state.parent / target).resolve()
     xpra_override = (
         tmp_path
         / "desktop"
@@ -1308,6 +1310,7 @@ def test_desktop_manifest_is_replaced_atomically(tmp_path, monkeypatch):
     assert list(session_dir.glob(".*.tmp")) == []
 
 
+@pytest.mark.skipif(os.name != "posix", reason="Linux Desktop launcher script")
 def test_shutdown_panel_launcher_requires_second_click(tmp_path):
     profile_dir = tmp_path / "desktop" / "profiles" / desktop_session.SYSTEM_SESSION_ID
     profile_dir.mkdir(parents=True)
@@ -1408,6 +1411,7 @@ def test_desktop_session_sync_consumes_shutdown_marker(tmp_path, monkeypatch):
     assert manager.get(session.session_id) is None
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX process liveness")
 def test_desktop_session_cleanup_preserves_live_owner_manifest(tmp_path, monkeypatch):
     session_dir = tmp_path / "sessions"
     legacy_session_dir = tmp_path / "legacy-sessions"
@@ -1776,7 +1780,7 @@ def test_office_runtime_dependency_install_waits_out_apt_locks(monkeypatch):
     installed_state = {"libreoffice-core": False}
     update_attempts = {"count": 0}
 
-    monkeypatch.setattr(hooks.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(hooks.os, "geteuid", lambda: 0, raising=False)
     monkeypatch.setattr(
         hooks.shutil,
         "which",
@@ -1858,7 +1862,7 @@ def test_cleanup_hook_installs_missing_desktop_session_dependencies(monkeypatch)
     calls = []
     installed_state = {"xpra": False}
 
-    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0, raising=False)
     monkeypatch.setattr(desktop_hooks.shutil, "which", lambda name: f"/usr/bin/{name}" if name in {"apt-get", "dpkg-query"} else "")
     monkeypatch.setattr(desktop_hooks, "RUNTIME_PACKAGES", ("xpra",))
     monkeypatch.setattr(desktop_hooks, "_package_installed", lambda package: installed_state.get(package, False))
@@ -1881,13 +1885,14 @@ def test_cleanup_hook_installs_missing_desktop_session_dependencies(monkeypatch)
     assert calls[1][:4] == ["apt-get", "install", "-y", "--no-install-recommends"]
 
 
+@pytest.mark.skipif(os.name != "posix", reason="Debian apt/dpkg")
 def test_cleanup_hook_enables_official_xpra_repo_when_kali_lacks_candidate(tmp_path, monkeypatch):
     calls = []
     installed_state = {"xpra": False, "ca-certificates": True}
     keyring = tmp_path / "keyrings" / "xpra.asc"
     source = tmp_path / "sources.list.d" / "xpra.sources"
 
-    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0, raising=False)
     monkeypatch.setattr(
         desktop_hooks.shutil,
         "which",
@@ -1927,13 +1932,14 @@ def test_cleanup_hook_enables_official_xpra_repo_when_kali_lacks_candidate(tmp_p
     assert calls[-1][:4] == ["apt-get", "install", "-y", "--no-install-recommends"]
 
 
+@pytest.mark.skipif(os.name != "posix", reason="Debian apt/dpkg")
 def test_cleanup_hook_uses_trixie_xpra_components_for_kali_arm64(tmp_path, monkeypatch):
     calls = []
     installed_state = {"xpra-server": False, "xpra-x11": False, "xpra-html5": False, "ca-certificates": True}
     keyring = tmp_path / "keyrings" / "xpra.asc"
     source = tmp_path / "sources.list.d" / "xpra.sources"
 
-    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0, raising=False)
     monkeypatch.setattr(
         desktop_hooks.shutil,
         "which",
@@ -1980,7 +1986,7 @@ def test_cleanup_hook_uses_trixie_xpra_components_for_kali_arm64(tmp_path, monke
 
 def test_cleanup_hook_stops_when_xpra_index_refresh_fails(monkeypatch):
     calls = []
-    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0, raising=False)
     monkeypatch.setattr(desktop_hooks.shutil, "which", lambda name: f"/usr/bin/{name}")
     monkeypatch.setattr(desktop_hooks, "RUNTIME_PACKAGES", ("xpra-server",))
     monkeypatch.setattr(desktop_hooks, "_package_installed", lambda package: False)
@@ -2009,7 +2015,7 @@ def test_cleanup_hook_installs_matching_xpra_client_stack(monkeypatch):
         "xpra-client-gtk3": False,
     }
 
-    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0, raising=False)
     monkeypatch.setattr(
         desktop_hooks.shutil,
         "which",
@@ -2053,7 +2059,7 @@ def test_cleanup_hook_repairs_kali_gtk_from_snapshot(tmp_path, monkeypatch, opti
 
     monkeypatch.setattr(system_packages, "KALI_SOURCE_FILES", (source,))
     monkeypatch.setattr(system_packages.platform, "freedesktop_os_release", lambda: {"ID": "kali"})
-    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0, raising=False)
     monkeypatch.setattr(
         desktop_hooks.shutil,
         "which",
@@ -2102,7 +2108,7 @@ def test_cleanup_hook_reports_required_xpra_codec_conflict(monkeypatch):
         "      but none of the choices are installable: [no choices]"
     )
 
-    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0)
+    monkeypatch.setattr(desktop_hooks.os, "geteuid", lambda: 0, raising=False)
     monkeypatch.setattr(
         desktop_hooks.shutil,
         "which",
@@ -2204,7 +2210,7 @@ def test_editor_named_create_and_save_as_match_file_browser_scope(office_state, 
     request = types.SimpleNamespace(headers={}, host_url="http://localhost/")
     payload = {"action": "create", "path": str(path), "source": "file-browser", "content": "print(1)\n"}
     opened = asyncio.run(handler.process(payload, request))
-    assert opened["ok"]
+    assert opened["ok"], opened.get("error")
     assert opened["text"] == "print(1)\n"
     assert not asyncio.run(handler.process(payload, request))["ok"]
     assert path.read_text() == "print(1)\n"
@@ -2235,13 +2241,17 @@ def test_editor_preserves_file_permissions_and_private_backups(office_state, mod
     document_store.rename_document(result["document"]["file_id"], renamed, content="echo renamed\n")
     for target in (path, renamed):
         saved = target.stat()
-        assert stat.S_IMODE(saved.st_mode) == mode
+        if os.name == "posix":
+            assert stat.S_IMODE(saved.st_mode) == mode
         assert (saved.st_uid, saved.st_gid) == (original.st_uid, original.st_gid)
-    assert stat.S_IMODE(office_state.backups.stat().st_mode) == 0o700
+    if os.name == "posix":
+        assert stat.S_IMODE(office_state.backups.stat().st_mode) == 0o700
     assert list(office_state.backups.iterdir())
-    assert all(stat.S_IMODE(backup.stat().st_mode) == 0o600 for backup in office_state.backups.iterdir())
+    if os.name == "posix":
+        assert all(stat.S_IMODE(backup.stat().st_mode) == 0o600 for backup in office_state.backups.iterdir())
 
 
+@pytest.mark.skipif(os.name != "posix", reason="POSIX fchmod")
 def test_editor_atomic_metadata_failure_keeps_original(office_state, monkeypatch):
     path = office_state.workdir / "private.sh"
     path.write_text("original\n")

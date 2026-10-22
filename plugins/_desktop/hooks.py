@@ -237,7 +237,7 @@ def _purge_packages(
     *,
     installed_packages: list[str] | None = None,
 ) -> None:
-    if os.geteuid() != 0 or not shutil.which("apt-get") or not shutil.which("dpkg-query"):
+    if not hasattr(os, "geteuid") or os.geteuid() != 0 or not shutil.which("apt-get") or not shutil.which("dpkg-query"):
         return
     installed = installed_packages if installed_packages is not None else []
     if not installed:
@@ -250,7 +250,7 @@ def _purge_packages(
 
 
 def _ensure_runtime_dependencies(installed: list[str], errors: list[str]) -> None:
-    if os.geteuid() != 0 or not shutil.which("apt-get") or not shutil.which("dpkg-query"):
+    if not hasattr(os, "geteuid") or os.geteuid() != 0 or not shutil.which("apt-get") or not shutil.which("dpkg-query"):
         return
     missing = [package for package in RUNTIME_PACKAGES if not _package_installed(package)]
     if not missing:

@@ -114,11 +114,7 @@ def _write_atomic(path: str, content: str) -> None:
             handle.flush()
             os.fsync(handle.fileno())
         os.replace(tmp_path, path)
-        directory_fd = os.open(directory, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        files.fsync_directory(directory)
     finally:
         if os.path.exists(tmp_path):
             os.unlink(tmp_path)

@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from io import BytesIO
 import json
+import os
 from pathlib import Path
 import stat
 from types import SimpleNamespace
@@ -121,11 +122,12 @@ def test_new_easy_profile_writes_only_minimum_exact_files(user_root: Path) -> No
     }
     assert (profile / "prompts" / editor.SPECIFICS_FILE).read_text() == instructions
     assert not list(profile.rglob("*.json"))
-    assert stat.S_IMODE((profile / "agent.yaml").stat().st_mode) == 0o644
-    assert (
-        stat.S_IMODE((profile / "prompts" / editor.SPECIFICS_FILE).stat().st_mode)
-        == 0o644
-    )
+    if os.name == "posix":
+        assert stat.S_IMODE((profile / "agent.yaml").stat().st_mode) == 0o644
+        assert (
+            stat.S_IMODE((profile / "prompts" / editor.SPECIFICS_FILE).stat().st_mode)
+            == 0o644
+        )
 
 
 def test_quick_create_uses_the_easy_sparse_save_path(user_root: Path) -> None:

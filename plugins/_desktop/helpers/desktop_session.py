@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import atexit
-import fcntl
+try:
+    import fcntl  # Linux-only: the generated URL/editor bridge scripts use it
+except ImportError:  # Windows has no fcntl; the Desktop plugin is Linux/X11-only
+    fcntl = None
 import hashlib
 import json
 import os

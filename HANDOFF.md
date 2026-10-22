@@ -18,8 +18,13 @@ Paste this file to the next agent maintaining this host/checkout.
   plugin (Xpra/XFCE) unavailable; LibreOffice is found in the app bundle.
 - Windows 10/11: `install-baremetal.ps1` + `run-baremetal.ps1`; winget packages;
   junctions `C:\a0`, `C:\exe`, `C:\opt\venv[-a0]` when elevated. Desktop
-  plugin unavailable. The PowerShell path is implemented but not yet smoke-tested
-  on real Windows hardware; verify it first there.
+  plugin unavailable. Smoke-tested on Windows 11 26200 (Python 3.12 venv via uv):
+  install, startup, WebUI, settings modal, and a real chat turn through a local
+  OpenAI-compatible gateway all work. Windows-specific fixes that this required:
+  `helpers/files.fsync_directory` (no-op on Windows; a directory cannot be opened
+  as a descriptor), `os.geteuid` guards in the Desktop/Office package hooks, and
+  a tolerant `fcntl` import in `plugins/_desktop/helpers/desktop_session.py`
+  (used only by the generated Linux bridge scripts).
 - Core cross-platform bits: `/a0` mapping uses `os.path`; code execution uses
   `powershell.exe` + pywinpty on Windows; `find_soffice` checks app-bundle and
   Program Files paths.

@@ -531,6 +531,22 @@ def write_file(relative_path: str, content: str, encoding: str = "utf-8"):
     with open(abs_path, "w", encoding=encoding) as f:
         f.write(content)
 
+def fsync_directory(path: str | os.PathLike) -> None:
+    """Flush a directory entry after a rename/link so the change survives a crash.
+
+    No-op on Windows: a directory cannot be opened as a file descriptor there
+    (``os.open`` fails with ``PermissionError``), and NTFS flushes directory
+    metadata without an explicit fsync.
+    """
+    if os.name == "nt":
+        return
+    descriptor = os.open(path, os.O_RDONLY)
+    try:
+        os.fsync(descriptor)
+    finally:
+        os.close(descriptor)
+
+
 def delete_file(relative_path: str):
     abs_path = get_abs_path(relative_path)
     if exists(abs_path):
@@ -738,9 +754,12 @@ def is_in_base_dir(path: str):
 
 def is_in_dir(path: str, dir: str):
     # check if the given path is within the directory
-    abs_path = os.path.abspath(path)
-    abs_dir = os.path.abspath(dir)
-    return os.path.commonpath([abs_path, abs_dir]) == abs_dir
+    abs_path = os.path.normcase(os.path.abspath(path))
+    abs_dir = os.path.normcase(os.path.abspath(dir))
+    try:
+        return os.path.commonpath([abs_path, abs_dir]) == abs_dir
+    except ValueError:  # different Windows drives
+        return False
 
 
 def get_subdirectories(

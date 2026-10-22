@@ -6,6 +6,8 @@ import stat
 import tempfile
 from threading import Lock, Timer
 
+from helpers import files
+
 
 
 CHUNK_BYTES = 1024 * 1024
@@ -62,7 +64,8 @@ def write_stream_atomic(source, target_path, *, max_bytes=None):
             if previous:
                 if hasattr(os, "geteuid") and os.geteuid() == 0:
                     os.fchown(output.fileno(), previous.st_uid, previous.st_gid)
-                os.fchmod(output.fileno(), stat.S_IMODE(previous.st_mode))
+                if hasattr(os, "fchmod"):
+                    os.fchmod(output.fileno(), stat.S_IMODE(previous.st_mode))
             output.flush()
             os.fsync(output.fileno())
         if previous:
@@ -74,11 +77,7 @@ def write_stream_atomic(source, target_path, *, max_bytes=None):
             os.replace(temporary, target)
         else:
             os.link(temporary, target)
-        directory_fd = os.open(target.parent, os.O_RDONLY)
-        try:
-            os.fsync(directory_fd)
-        finally:
-            os.close(directory_fd)
+        files.fsync_directory(target.parent)
         return result
     finally:
         Path(temporary).unlink(missing_ok=True)

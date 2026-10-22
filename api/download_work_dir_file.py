@@ -33,7 +33,7 @@ class DownloadFile(ApiHandler):
         file_path = request.args.get("path", input.get("path", ""))
         if not file_path:
             raise ValueError("No file path provided")
-        if not file_path.startswith("/"):
+        if not file_path.startswith("/") and not os.path.isabs(file_path):
             file_path = f"/{file_path}"
 
         try:

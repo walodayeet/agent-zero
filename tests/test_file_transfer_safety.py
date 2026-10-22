@@ -1,5 +1,6 @@
 import asyncio
 import io
+import os
 from pathlib import Path
 from types import SimpleNamespace
 import zipfile
@@ -31,11 +32,13 @@ def test_atomic_write_failure_preserves_bytes_and_mode(tmp_path):
     with pytest.raises(OSError):
         transfers.write_stream_atomic(Broken(), destination)
     assert destination.read_bytes() == b"keep"
-    assert destination.stat().st_mode & 0o777 == 0o751
+    if os.name == "posix":
+        assert destination.stat().st_mode & 0o777 == 0o751
     assert not list(tmp_path.glob(".partial-*"))
     transfers.write_stream_atomic(io.BytesIO(b"updated"), destination)
     assert destination.read_bytes() == b"updated"
-    assert destination.stat().st_mode & 0o777 == 0o751
+    if os.name == "posix":
+        assert destination.stat().st_mode & 0o777 == 0o751
 
 
 def test_atomic_write_rejects_concurrent_replacement(tmp_path):
@@ -60,6 +63,8 @@ def test_download_holds_original_descriptor_and_cleans_temp(tmp_path):
     assert b"".join(response.response) == b"original"
     response.close()
     assert not source.exists()
+    if os.name != "posix":
+        pytest.skip("Windows cannot unlink a file while a descriptor is open")
     source.write_bytes(b"original")
     response = transfers.stream_file_download(source, "snapshot")
     source.unlink(); source.write_bytes(b"replacement")

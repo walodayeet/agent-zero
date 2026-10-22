@@ -29,7 +29,9 @@ def test_download_resolvers_match_file_browser_root(tmp_path: Path) -> None:
     archive_path = Path(create_selected_zip([str(file_path)], "/"))
     try:
         with zipfile.ZipFile(archive_path) as archive:
-            name = str(file_path).lstrip("/")
+            # Archive entries are relative to the filesystem root ("/" on POSIX,
+            # the drive root on Windows) and always use forward slashes.
+            name = file_path.relative_to(Path(file_path.anchor)).as_posix()
             assert archive.namelist() == [name]
             assert archive.read(name) == b"downloadable"
     finally:

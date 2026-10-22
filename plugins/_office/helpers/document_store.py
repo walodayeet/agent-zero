@@ -62,7 +62,7 @@ def now_iso() -> str:
 def ensure_dirs() -> None:
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     BACKUP_DIR.mkdir(mode=0o700, parents=True, exist_ok=True)
-    if BACKUP_DIR.stat().st_uid != os.geteuid():
+    if hasattr(os, "geteuid") and BACKUP_DIR.stat().st_uid != os.geteuid():
         os.chown(BACKUP_DIR, os.geteuid(), -1)
     BACKUP_DIR.chmod(0o700)
 
@@ -176,11 +176,16 @@ def normalize_path(path: str | Path, context_id: str = "", allow_base_dir: bool 
 
 
 def _is_relative_to(path: Path, root: Path) -> bool:
+    # A filesystem root as scope means "anywhere on this filesystem"; on Windows
+    # Path("/") has no drive, so comparing it with a drive path raises.
+    if root.anchor and root == Path(root.anchor):
+        return path.anchor != ""
+    left = os.path.normcase(str(path))
+    right = os.path.normcase(str(root))
     try:
-        os.path.commonpath([str(path), str(root)])
-    except ValueError:
+        return os.path.commonpath([left, right]) == right
+    except ValueError:  # different Windows drives
         return False
-    return os.path.commonpath([str(path), str(root)]) == str(root)
 
 
 @contextmanager
@@ -380,9 +385,10 @@ def rename_document(
             if renamed_open:
                 metadata = source.stat()
                 current = resolved.stat()
-                if (current.st_uid, current.st_gid) != (metadata.st_uid, metadata.st_gid):
+                if hasattr(os, "chown") and (current.st_uid, current.st_gid) != (metadata.st_uid, metadata.st_gid):
                     os.chown(resolved, metadata.st_uid, metadata.st_gid)
-                os.chmod(resolved, stat.S_IMODE(metadata.st_mode))
+                if hasattr(os, "chmod"):
+                    os.chmod(resolved, stat.S_IMODE(metadata.st_mode))
             else:
                 source.rename(resolved)
             final_data = resolved.read_bytes()
@@ -661,9 +667,10 @@ def _write_atomic(path: Path, data: bytes, *, source: Path | None = None) -> Non
             handle.flush()
             if metadata:
                 current = os.fstat(handle.fileno())
-                if (current.st_uid, current.st_gid) != (metadata.st_uid, metadata.st_gid):
+                if hasattr(os, "fchown") and (current.st_uid, current.st_gid) != (metadata.st_uid, metadata.st_gid):
                     os.fchown(handle.fileno(), metadata.st_uid, metadata.st_gid)
-                os.fchmod(handle.fileno(), stat.S_IMODE(metadata.st_mode))
+                if hasattr(os, "fchmod"):
+                    os.fchmod(handle.fileno(), stat.S_IMODE(metadata.st_mode))
             os.fsync(handle.fileno())
         os.replace(tmp_path, path)
     finally:

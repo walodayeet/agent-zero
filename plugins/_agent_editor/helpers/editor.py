@@ -1474,16 +1474,23 @@ def _stage_bytes(directory: Path, name: str, content: bytes) -> Path:
     )
     path = Path(temporary)
     try:
-        os.fchmod(
-            descriptor,
-            target.stat().st_mode & 0o777 if target.exists() else 0o644,
-        )
+        if hasattr(os, "fchmod"):
+            os.fchmod(
+                descriptor,
+                target.stat().st_mode & 0o777 if target.exists() else 0o644,
+            )
         with os.fdopen(descriptor, "wb") as handle:
+            descriptor = -1  # fdopen owns the descriptor now
             handle.write(content)
             handle.flush()
             os.fsync(handle.fileno())
         return path
     except Exception:
+        if descriptor >= 0:
+            try:
+                os.close(descriptor)
+            except OSError:
+                pass
         path.unlink(missing_ok=True)
         raise
 
@@ -1514,11 +1521,7 @@ def _prune_empty_directories(root: Path) -> None:
 
 
 def _fsync_directory(path: Path) -> None:
-    descriptor = os.open(path, os.O_RDONLY)
-    try:
-        os.fsync(descriptor)
-    finally:
-        os.close(descriptor)
+    files.fsync_directory(path)
 
 
 def _invalidate_profile_caches() -> None:

@@ -26,7 +26,7 @@ def normalize_paths(paths) -> list[str]:
         path = raw_path.strip()
         if not path:
             continue
-        if not path.startswith("/"):
+        if not path.startswith("/") and not os.path.isabs(path):
             path = f"/{path}"
         if path not in seen:
             normalized.append(path)
@@ -84,9 +84,17 @@ def resolve_download_path(path: str, base_dir: Path) -> Path:
     try:
         resolved.relative_to(base_dir)
     except ValueError as exc:
-        raise ValueError("Invalid file path") from exc
+        # A filesystem root as base means "the whole filesystem": on Windows the
+        # POSIX-style "/" only covers the current drive, so absolute paths on another
+        # drive would otherwise be rejected.
+        if not _is_filesystem_root(base_dir):
+            raise ValueError("Invalid file path") from exc
 
     return resolved
+
+
+def _is_filesystem_root(path: Path) -> bool:
+    return bool(path.anchor) and path == Path(path.anchor)
 
 
 def collapse_nested_paths(paths: list[Path]) -> list[Path]:
@@ -106,7 +114,8 @@ def archive_root_name(source_path: Path, current_dir: Path | None, base_dir: Pat
             pass
 
     try:
-        return source_path.relative_to(base_dir).as_posix().strip("/")
+        base = Path(source_path.anchor) if _is_filesystem_root(base_dir) else base_dir
+        return source_path.relative_to(base).as_posix().strip("/")
     except ValueError:
         return source_path.name
 

@@ -37,6 +37,7 @@
 - `remove_code_fences(text, language: str | None=...)`: Remove every code fence, or only fences for one language while preserving their contents. With a language, it also drops an orphan opening marker left when a prompt budget cut the block before its closing marker; callers should strip per section so fences from different sections are never paired.
 - `is_full_json_template(text)`
 - `write_file(relative_path: str, content: str, encoding: str=...)`
+- `fsync_directory(path: str | os.PathLike) -> None`: flush a directory entry after a rename/link; no-op on Windows, where directories cannot be opened as descriptors.
 - `delete_file(relative_path: str)`
 - `write_file_bin(relative_path: str, content: bytes)`
 - `write_file_base64(relative_path: str, content: str)`

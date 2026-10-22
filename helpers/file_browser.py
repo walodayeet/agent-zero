@@ -104,7 +104,7 @@ class FileBrowser:
                 raise FileLimitExceeded(limit)
             # Resolve the target directory path
             target_file = (self.base_dir / current_path / filename).resolve()
-            if not str(target_file).startswith(str(self.base_dir)):
+            if not self._inside_base(target_file):
                 raise ValueError("Invalid target directory")
 
             os.makedirs(target_file.parent, exist_ok=True)
@@ -136,7 +136,7 @@ class FileBrowser:
         try:
             # Resolve the target directory path
             target_dir = (self.base_dir / current_path).resolve()
-            if not str(target_dir).startswith(str(self.base_dir)):
+            if not self._inside_base(target_dir):
                 raise ValueError("Invalid target directory")
 
             os.makedirs(target_dir, exist_ok=True)
@@ -179,6 +179,21 @@ class FileBrowser:
             raise ValueError("Invalid file path")
         return entry
 
+    def _inside_base(self, path: Path) -> bool:
+        """Containment check that works for any filesystem root.
+
+        A string prefix comparison breaks on Windows (``str(Path('/'))`` is ``'\\\\'``
+        while resolved paths carry a drive letter), so compare resolved paths instead.
+        The final component is not resolved so a symlink inside the browser root stays
+        addressable.
+        """
+        candidate = path.parent.resolve() / path.name
+        try:
+            candidate.relative_to(self.base_dir.resolve())
+            return True
+        except ValueError:
+            return False
+
     def delete_file(self, file_path: str) -> bool:
         """Delete a file or empty directory"""
         try:
@@ -208,7 +223,7 @@ class FileBrowser:
                 raise FileNotFoundError("File or folder not found")
 
             new_path = full_path.with_name(new_name)
-            if not str(new_path).startswith(str(self.base_dir)):
+            if not self._inside_base(new_path):
                 raise ValueError("Invalid target path")
             if full_path == new_path:
                 return True
@@ -285,11 +300,11 @@ class FileBrowser:
                 raise ValueError("Folder name cannot include path separators")
 
             parent_full = (self.base_dir / self._map(parent_path)).resolve()
-            if not str(parent_full).startswith(str(self.base_dir)):
+            if not self._inside_base(parent_full):
                 raise ValueError("Invalid parent path")
 
             target_dir = (parent_full / folder_name).resolve()
-            if not str(target_dir).startswith(str(self.base_dir)):
+            if not self._inside_base(target_dir):
                 raise ValueError("Invalid target path")
             if target_dir.exists():
                 raise FileExistsError("Folder already exists")
@@ -307,7 +322,7 @@ class FileBrowser:
             data = self.text_bytes(content)
 
             full_path = (self.base_dir / self._map(file_path)).resolve()
-            if not str(full_path).startswith(str(self.base_dir)):
+            if not self._inside_base(full_path):
                 raise ValueError("Invalid path")
             if full_path.exists() and full_path.is_dir():
                 raise ValueError("Target is a directory")
@@ -415,7 +430,7 @@ class FileBrowser:
             mapped_path = self._map(current_path)
             # Resolve the full path while preventing directory traversal
             full_path = (self.base_dir / mapped_path).resolve()
-            if not str(full_path).startswith(str(self.base_dir)):
+            if not self._inside_base(full_path):
                 raise ValueError("Invalid path")
             if not full_path.exists():
                 raise FileNotFoundError("Directory not found")
