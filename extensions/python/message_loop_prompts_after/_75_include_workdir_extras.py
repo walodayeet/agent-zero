@@ -4,7 +4,7 @@ from helpers import projects
 from helpers import settings
 from helpers import runtime
 from helpers import file_tree
-from helpers import files, prompt_compact
+from helpers import files
 
 class IncludeWorkdirExtras(Extension):
     async def execute(self, loop_data: LoopData = LoopData(), **kwargs):
@@ -49,13 +49,6 @@ class IncludeWorkdirExtras(Extension):
             max_files = set["workdir_max_files"]
             max_folders = set["workdir_max_folders"]
             max_lines = set["workdir_max_lines"]
-            if prompt_compact.enabled():
-                # Compact mode keeps the workdir overview small: it is re-sent on
-                # every model call, so 0 (unlimited) becomes a tight cap.
-                max_depth = min(max_depth, 3) if max_depth else 3
-                max_files = min(max_files, 10) if max_files else 10
-                max_folders = min(max_folders, 10) if max_folders else 10
-                max_lines = min(max_lines, 60) if max_lines else 60
             gitignore_raw = set["workdir_gitignore"]
 
             folder = set["workdir_path"]

@@ -31,9 +31,6 @@ export A0_EMBEDDING_BACKEND="${A0_EMBEDDING_BACKEND:-onnx}"
 # onnxruntime and faiss/sklearn each ship an OpenMP runtime; Intel's guard aborts
 # the process on the duplicate. Standard workaround for this stack.
 export KMP_DUPLICATE_LIB_OK="${KMP_DUPLICATE_LIB_OK:-TRUE}"
-# Compact static prompt sections (tool examples, skill descriptions, workdir tree).
-# A0_COMPACT_PROMPTS=0 restores the full prompt.
-export A0_COMPACT_PROMPTS="${A0_COMPACT_PROMPTS:-1}"
 
 seed_usr() {
   mkdir -p "$1/agents" "$1/plugins" "$1/skills" "$1/knowledge" "$1/workdir" \

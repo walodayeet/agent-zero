@@ -1,7 +1,7 @@
 from typing import Any
 
 from helpers.extension import Extension, extensible
-from helpers import prompt_compact, skills as skills_helper, tool_policy
+from helpers import skills as skills_helper, tool_policy
 from agent import Agent, LoopData
 
 
@@ -25,18 +25,14 @@ async def build_prompt(agent: Agent) -> str:
     if not tool_policy.resolve_tool(agent, "skills_tool").allowed:
         return ""
 
-    if prompt_compact.enabled():
-        # The catalog is discoverable through skills_tool; listing every name in
-        # the system prompt costs ~1.3k prompt tokens on every turn.
-        return agent.read_prompt(
-            "agent.system.skills.md",
-            skills="use skills_tool action list for the catalog",
-        )
-
     available = skills_helper.list_skills(agent=agent)
     result: list[str] = []
     for skill in available:
-        result.append(prompt_compact.skill_line(skill.name, skill.description))
+        name = skill.name.strip().replace("\n", " ")[:100]
+        descr = skill.description.replace("\n", " ").strip()
+        if len(descr) > 100:
+            descr = descr[:100].rstrip() + "..."
+        result.append(f"- {name}: {descr}" if descr else f"- {name}")
 
     if not result:
         return ""

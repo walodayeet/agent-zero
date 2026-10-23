@@ -21,10 +21,6 @@ $env:A0_EMBEDDING_BACKEND = if ($env:A0_EMBEDDING_BACKEND) { $env:A0_EMBEDDING_B
 # onnxruntime and faiss/sklearn each ship an OpenMP runtime; Intel's guard aborts
 # the process on the duplicate. Standard workaround for this stack.
 $env:KMP_DUPLICATE_LIB_OK = if ($env:KMP_DUPLICATE_LIB_OK) { $env:KMP_DUPLICATE_LIB_OK } else { "TRUE" }
-# Compact the static system prompt (tool examples, skill descriptions, workdir
-# tree): ~19.9k -> ~6.2k tokens, which cuts time-to-first-token on every call.
-# A0_COMPACT_PROMPTS=0 restores the full prompt.
-$env:A0_COMPACT_PROMPTS = if ($env:A0_COMPACT_PROMPTS) { $env:A0_COMPACT_PROMPTS } else { "1" }
 
 # Local gateways must bypass any proxy.
 $loopbackNoProxy = "localhost,127.0.0.1,::1,host.docker.internal"

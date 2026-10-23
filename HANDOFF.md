@@ -66,25 +66,17 @@ Paste this file to the next agent maintaining this host/checkout.
   WebUI boot no longer blocks first paint on the ~3 MB service-worker bundle
   cache write: the app document is written immediately and the cache warms in the
   background (cold FCP 896-1408 ms -> 332-708 ms, DCL ~50 ms, same 250 assets).
-  Prompt weight: the launchers set `A0_COMPACT_PROMPTS=1`. `helpers/prompt_compact.py`
-  drops fenced tool examples, keeps the heading/description/arguments (350 chars
-  per tool), lists skills by name only, and caps the workdir tree at 60 lines.
-  The agent0 prompt drops from 19,892 to ~6,500 tokens (system_tools 10.4k -> 2.4k,
-  skills 5.5k -> 1.6k), which is where most of the per-turn gain now comes from.
-  `A0_COMPACT_PROMPTS=0` restores the full prompt; tests run with it unset and
-  `tests/test_prompt_compact.py` covers the compactor.
-
 ## Linux parity
 - `run-baremetal.sh` already exports the same knobs the Windows launcher sets:
-  `KMP_DUPLICATE_LIB_OK=TRUE` (same duplicate-OpenMP abort), `A0_COMPACT_PROMPTS=1`
-  and the ONNX embedding backend; `install-baremetal.sh --systemd` generates a
+  `KMP_DUPLICATE_LIB_OK=TRUE` (same duplicate-OpenMP abort) and the ONNX
+  embedding backend; `install-baremetal.sh --systemd` generates a
   systemd --user unit that runs the launcher with `Restart=on-failure`, which is
   the Linux equivalent of the Windows scheduled tasks (no cron watchdog needed).
 - `initialize_preload()` now starts `preload.warm_skills` even when
   `A0_PRELOAD=0` (the Linux default), so the first prompt build does not parse
   the 233 SKILL.md files. Embeddings/vector store still load lazily there.
-- The terminal poll/echo fix, the UI cache headers and the compact prompts are
-  platform-neutral Python and apply on Linux unchanged.
+- The terminal poll/echo fix and the UI cache headers are platform-neutral
+  Python and apply on Linux unchanged.
 
 ## UI and process health
 - Static UI files were served with `Cache-Control: no-cache`, so every page load
@@ -104,6 +96,13 @@ Paste this file to the next agent maintaining this host/checkout.
 - Known cosmetic issue: the background memorize util items open a "Processing..."
   group after the response and never close it, so the transcript keeps one
   spinner card at the bottom until the next message.
+
+## Prompt policy
+- The system prompt is the upstream full prompt: tool docs with examples,
+  the complete skill catalog with descriptions, and the workdir tree. Compaction
+  was reverted; prompts are never traded for tokens.
+- Performance work must stay architectural: terminal I/O, startup/restore,
+  caching of computed artifacts, process model, event-loop blocking.
 
 ## Non-LLM paths
 - Terminal tool: `get_terminal_output` polled every 0.5 s, so even `echo` cost
@@ -130,7 +129,7 @@ Paste this file to the next agent maintaining this host/checkout.
   completion. Agent Zero is timed over `api/message_async` (fresh context) to the
   turn's `response` log entry. Tasks run interleaved (A0 then Hermes per rep) so
   gateway drift hits both, five reps, one warm-up each.
-- Medians (2026-10-23, compact prompts on, delayed recall):
+- Medians (2026-10-23, full prompts):
   simple reply A0 1.94 s vs Hermes 2.77 s (1.43x); terminal tool A0 2.61 s vs
   5.17 s (1.98x); three-sentence answer A0 1.94 s vs 3.16 s (1.63x).
   The Hermes number carries ~0.6 s of harness overhead (0.4 s paste delay plus
