@@ -1,6 +1,6 @@
 project_memory_isolation: true
 memory_recall_enabled: true
-memory_recall_delayed: false
+memory_recall_delayed: true
 memory_recall_interval: 3
 memory_recall_history_len: 10000
 memory_recall_memories_max_search: 12

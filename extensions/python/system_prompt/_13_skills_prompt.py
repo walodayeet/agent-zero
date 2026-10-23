@@ -25,6 +25,14 @@ async def build_prompt(agent: Agent) -> str:
     if not tool_policy.resolve_tool(agent, "skills_tool").allowed:
         return ""
 
+    if prompt_compact.enabled():
+        # The catalog is discoverable through skills_tool; listing every name in
+        # the system prompt costs ~1.3k prompt tokens on every turn.
+        return agent.read_prompt(
+            "agent.system.skills.md",
+            skills="use skills_tool action list for the catalog",
+        )
+
     available = skills_helper.list_skills(agent=agent)
     result: list[str] = []
     for skill in available:

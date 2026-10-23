@@ -22,8 +22,8 @@ class CompactOutput(Extension):
             return
         system_prompt.append(
             "### Compact response format\n"
-            "- thoughts: optional, at most one short line\n"
-            "- headline: at most 8 words\n"
-            "- tool_args: only the keys the tool needs\n"
-            "- output the JSON object only"
+            "- output only the JSON object\n"
+            "- omit `thoughts` and `headline` for direct answers; add one short\n"
+            "  `thoughts` line only when the step needs planning\n"
+            "- `tool_args`: only the keys the tool needs"
         )

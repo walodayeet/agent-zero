@@ -79,14 +79,25 @@ Paste this file to the next agent maintaining this host/checkout.
   `config.yaml` has `model: {default: deepseek-v4.1-flash, provider: cliproxy,
   base_url: http://127.0.0.1:20301/v1}` and a `providers.cliproxy` entry with
   `key_env: CLIPROXY_API_KEY`; the key lives in that home's `.env`.
-- Protocol: one warm-up + five measured runs per task; Agent Zero measured over
-  `api/message_async` with a fresh context and the turn's response log entry,
-  Hermes via `hermes -z "<prompt>" --yolo` (process start included). Model and
-  gateway identical for both.
-- Medians (2026-10-23): simple reply A0 2.20 s vs Hermes 6.41 s (2.9x); terminal
-  tool A0 3.39 s vs 8.20 s (2.4x); three-sentence answer A0 3.01 s vs 6.78 s
-  (2.3x). Agent Zero's footprint ~690 MB vs Hermes ~0.27-0.29 GB per CLI run.
-- Responses API (`a0_api_mode: responses`) was tried and reverted: 8.9-13.3 s per
+- Interactive protocol: Hermes runs in a Herdr pane (`herdr agent start
+  hermes-bench --kind hermes --pane w2:p1 -- --yolo`, persistent TUI, YOLO). A
+  turn is timed from `pane send-text` + `Enter` to the agent's next `done`
+  completion. Agent Zero is timed over `api/message_async` (fresh context) to the
+  turn's `response` log entry. Tasks run interleaved (A0 then Hermes per rep) so
+  gateway drift hits both, five reps, one warm-up each.
+- Medians (2026-10-23, compact prompts on, delayed recall):
+  simple reply A0 1.94 s vs Hermes 2.77 s (1.43x); terminal tool A0 2.61 s vs
+  5.17 s (1.98x); three-sentence answer A0 1.94 s vs 3.16 s (1.63x).
+  The Hermes number carries ~0.6 s of harness overhead (0.4 s paste delay plus
+  CLI calls); the adjusted ratios are ~1.15x / 1.75x / 1.35x.
+- The model is the floor on short turns: a direct gateway call with a cached
+  prefix returns in 1.0-1.3 s TTFT regardless of whether the prompt is 1.5 k or
+  13 k characters, and the endpoint always emits reasoning tokens. 2x on a
+  trivial reply would need Agent Zero's whole turn under ~1.1 s, below the model
+  call itself; tool and multi-step turns are where the 2x gap is reachable.
+- One-shot `hermes -z` numbers (6.4-8.2 s) include its process and plugin boot
+  and are not comparable with the interactive TUI.
+- Responses API (`a0_api_mode: responses`) was tried and reverted- Responses API (`a0_api_mode: responses`) was tried and reverted: 8.9-13.3 s per
   simple turn on this gateway, slower than chat completions.
   With the ONNX embedding backend (`A0_EMBEDDING_BACKEND=onnx`, default in both
   launchers) and the vector-store warm-up in the same background preload, the
