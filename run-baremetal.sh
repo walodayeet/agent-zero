@@ -28,6 +28,9 @@ export A0_PRELOAD="${A0_PRELOAD:-0}"
 # Local embeddings through onnxruntime instead of torch (~-400 MB RSS, ~-9 s load;
 # vectors are identical). Set A0_EMBEDDING_BACKEND=st to use sentence-transformers.
 export A0_EMBEDDING_BACKEND="${A0_EMBEDDING_BACKEND:-onnx}"
+# onnxruntime and faiss/sklearn each ship an OpenMP runtime; Intel's guard aborts
+# the process on the duplicate. Standard workaround for this stack.
+export KMP_DUPLICATE_LIB_OK="${KMP_DUPLICATE_LIB_OK:-TRUE}"
 # Compact static prompt sections (tool examples, skill descriptions, workdir tree).
 # A0_COMPACT_PROMPTS=0 restores the full prompt.
 export A0_COMPACT_PROMPTS="${A0_COMPACT_PROMPTS:-1}"

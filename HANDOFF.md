@@ -74,6 +74,25 @@ Paste this file to the next agent maintaining this host/checkout.
   `A0_COMPACT_PROMPTS=0` restores the full prompt; tests run with it unset and
   `tests/test_prompt_compact.py` covers the compactor.
 
+## UI and process health
+- Static UI files were served with `Cache-Control: no-cache`, so every page load
+  revalidated ~200 JS/CSS/component files; Flask now sets
+  `SEND_FILE_MAX_AGE_DEFAULT=3600` (reload: 23 network requests, 201 cache hits).
+- The server process was dying mid-turn with `OMP: Error #15: ... libomp140 ...
+  already initialized` (onnxruntime and the faiss/sklearn stack ship different
+  OpenMP runtimes). Both launchers export `KMP_DUPLICATE_LIB_OK=TRUE`, which
+  stops Intel's duplicate-runtime abort. This was the "UI stuck / Not connected"
+  symptom: the backend aborted while the browser waited for the response.
+- The server runs under the `AgentZeroServer` scheduled task (onlogon);
+  `AgentZeroPerf` runs `scripts/ensure-a0.ps1` every 5 minutes and restarts it
+  only when port 5000 is free. Task Scheduler owns the process tree, so closing
+  a terminal no longer kills it.
+- Removed 125 benchmark-only chats (`bench*`, `PONG*`, `Ping*` titles) that made
+  the sidebar list huge; real chats untouched.
+- Known cosmetic issue: the background memorize util items open a "Processing..."
+  group after the response and never close it, so the transcript keeps one
+  spinner card at the bottom until the next message.
+
 ## Non-LLM paths
 - Terminal tool: `get_terminal_output` polled every 0.5 s, so even `echo` cost
   ~0.64 s; it now polls every 0.1 s (~0.15-0.2 s). ConPTY re-renders the typed

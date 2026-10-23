@@ -18,6 +18,9 @@ $env:A0_PRELOAD = if ($env:A0_PRELOAD) { $env:A0_PRELOAD } else { "1" }
 # Local embeddings through onnxruntime instead of torch (-~400 MB RSS, ~-9 s load).
 # Vectors are identical to sentence-transformers; set A0_EMBEDDING_BACKEND=st to disable.
 $env:A0_EMBEDDING_BACKEND = if ($env:A0_EMBEDDING_BACKEND) { $env:A0_EMBEDDING_BACKEND } else { "onnx" }
+# onnxruntime and faiss/sklearn each ship an OpenMP runtime; Intel's guard aborts
+# the process on the duplicate. Standard workaround for this stack.
+$env:KMP_DUPLICATE_LIB_OK = if ($env:KMP_DUPLICATE_LIB_OK) { $env:KMP_DUPLICATE_LIB_OK } else { "TRUE" }
 # Compact the static system prompt (tool examples, skill descriptions, workdir
 # tree): ~19.9k -> ~6.2k tokens, which cuts time-to-first-token on every call.
 # A0_COMPACT_PROMPTS=0 restores the full prompt.
