@@ -74,6 +74,20 @@ Paste this file to the next agent maintaining this host/checkout.
   `A0_COMPACT_PROMPTS=0` restores the full prompt; tests run with it unset and
   `tests/test_prompt_compact.py` covers the compactor.
 
+## Non-LLM paths
+- Terminal tool: `get_terminal_output` polled every 0.5 s, so even `echo` cost
+  ~0.64 s; it now polls every 0.1 s (~0.15-0.2 s). ConPTY re-renders the typed
+  line, and the reader saw the command concatenated with itself, which made the
+  model spend its second call reasoning about the noise; `fix_full_output` now
+  drops leading copies of the sent command. Measured tool step (LLM call + tool)
+  2.65 s -> 1.72 s per call. The console stream still prints the raw redraw;
+  only the tool result is cleaned, which is what the model reads.
+- Preload warms the skill catalog (`skills.list_skills`): cold 0.33 s vs warm
+  0.03 s, and the first system-prompt build parses 233 SKILL.md files otherwise.
+- Per-turn non-LLM budget (warm): prompt build 0.15 s, memory recall 0.05-0.25 s
+  (background, delayed), chat persistence ~0.07 s, context/welcome ~0.3 s on a
+  new chat. Model call remains 1.4-2.5 s and dominates.
+
 ## Hermes head-to-head (same host, same gateway/model)
 - Hermes uses `%LOCALAPPDATA%\hermes` on Windows (not `~/.hermes`). Its
   `config.yaml` has `model: {default: deepseek-v4.1-flash, provider: cliproxy,

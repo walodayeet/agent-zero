@@ -29,6 +29,14 @@ async def preload():
                 await Memory.get_by_subdir("default")
             except Exception:
                 pass
+        # Warm the skill catalog: parsing every SKILL.md frontmatter is the
+        # first prompt build's hot spot (~0.4-0.8 s on this machine).
+        try:
+            from helpers import skills as skills_helper
+
+            await asyncio.to_thread(skills_helper.list_skills)
+        except Exception:
+            pass
         PrintStyle().print("Preload completed.")
     except Exception as e:
         PrintStyle().error(f"Error in preload: {e}")

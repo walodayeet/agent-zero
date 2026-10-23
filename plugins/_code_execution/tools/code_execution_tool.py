@@ -234,6 +234,7 @@ class CodeExecution(Tool):
         for i in range(2):
             try:
                 self.state.shells[session].running = True
+                self._echoed_command = command
                 await self.state.shells[session].session.send_command(command)
 
                 locl = (
@@ -280,7 +281,7 @@ class CodeExecution(Tool):
         between_output_timeout=15,
         dialog_timeout=5,
         max_exec_timeout=240,
-        sleep_time=0.5,
+        sleep_time=0.1,
         prefix="",
         timeouts: dict | None = None,
     ):
@@ -547,6 +548,14 @@ class CodeExecution(Tool):
 
     def fix_full_output(self, output: str):
         output = re.sub(r"(?<!\\)\\x[0-9A-Fa-f]{2}", "", output)
+        # ConPTY re-renders the typed line on each redraw; the reader then sees
+        # the command concatenated with itself. Drop those leading copies.
+        echoed = getattr(self, "_echoed_command", "")
+        if echoed and output.startswith(echoed):
+            rest = output
+            while rest.startswith(echoed):
+                rest = rest[len(echoed):]
+            output = rest.lstrip()
         output = truncate_text_agent(agent=self.agent, output=output, threshold=1000000)
         return output
 
