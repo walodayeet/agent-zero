@@ -78,6 +78,25 @@ Paste this file to the next agent maintaining this host/checkout.
 - The terminal poll/echo fix and the UI cache headers are platform-neutral
   Python and apply on Linux unchanged.
 
+## Transport and remote
+- uvicorn ran on the pure-Python h11 parser because `httptools` was not
+  installed. `requirements.txt` now pins `httptools>=0.6` (auto-selected by
+  uvicorn) and `uvloop>=0.21; sys_platform != "win32"`; `install-baremetal.sh`
+  installs from that file, so Linux gets libuv too. Measured on this host: 200
+  keep-alive `/api/health` requests in 0.94 s (~213 req/s) through the full
+  Flask/WSGI stack.
+- WebSocket permessage-deflate is already active (uvicorn default
+  `ws_per_message_deflate=True`); the 1.1 MB state snapshot for a large chat is
+  compressed on the wire. python-socketio's `http_compression` covers the
+  polling fallback (default on).
+- Remote terminals use Paramiko; `SSHClient.connect(compress=True)` now
+  compresses the SSH transport, which matters for text-heavy command output on
+  WAN links. Transport keep-alive was already set (5 s).
+- Tried and reverted: serving component HTML from `/ui/asset-bundle` on first
+  load. The bundle is 259 files / 3.1 MB and resolves after most components have
+  already started loading, so it added bytes without cutting the 60-64 component
+  requests. The service-worker preload path upstream is unchanged.
+
 ## UI and process health
 - Static UI files were served with `Cache-Control: no-cache`, so every page load
   revalidated ~200 JS/CSS/component files; Flask now sets

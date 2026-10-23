@@ -69,6 +69,9 @@ class SSHInteractiveSession:
                     self.password,
                     allow_agent=False,
                     look_for_keys=False,
+                    # Compress the SSH transport: remote terminal output is text and
+                    # compresses 5-20x, which matters most on WAN links.
+                    compress=True,
                 )
 
                 # --------- NEW: enable transport-level keep-alives -------------
