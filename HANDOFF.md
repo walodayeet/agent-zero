@@ -129,11 +129,14 @@ Paste this file to the next agent maintaining this host/checkout.
   completion. Agent Zero is timed over `api/message_async` (fresh context) to the
   turn's `response` log entry. Tasks run interleaved (A0 then Hermes per rep) so
   gateway drift hits both, five reps, one warm-up each.
-- Medians (2026-10-23, full prompts):
-  simple reply A0 1.94 s vs Hermes 2.77 s (1.43x); terminal tool A0 2.61 s vs
-  5.17 s (1.98x); three-sentence answer A0 1.94 s vs 3.16 s (1.63x).
-  The Hermes number carries ~0.6 s of harness overhead (0.4 s paste delay plus
-  CLI calls); the adjusted ratios are ~1.15x / 1.75x / 1.35x.
+- Medians with the full prompt restored (2026-10-23, fresh context per turn):
+  simple reply 3.56 s (2.65-7.35), terminal tool 4.66 s, three-sentence answer
+  4.64 s. The compact-prompt figures (1.94 / 2.61 / 1.94 s) are void: they were
+  bought by shrinking the system prompt, which is not allowed.
+- Hermes interactive (TUI, Herdr): pong 2.77 s, tool 5.17 s, explain 3.16 s.
+  The model call is now the floor: 68k static system prompt + ~30-60 output
+  tokens per turn on the shared gateway. Architecture cannot cut the generation
+  time; only the ~0.2 s prompt assembly and ~0.1 s state work are left.
 - The model is the floor on short turns: a direct gateway call with a cached
   prefix returns in 1.0-1.3 s TTFT regardless of whether the prompt is 1.5 k or
   13 k characters, and the endpoint always emits reasoning tokens. 2x on a
