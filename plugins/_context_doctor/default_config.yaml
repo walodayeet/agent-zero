@@ -1,3 +1,7 @@
 update_log: false
 suppress_xml: true
 split_thoughts: true
+
+# Accept a plain-text model reply as the final answer instead of spending
+# another model call on a tool-call reminder.
+plain_text_as_response: true

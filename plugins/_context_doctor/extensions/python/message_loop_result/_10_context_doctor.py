@@ -49,6 +49,29 @@ class ContextDoctor(Extension):
 
         # Treat as raw-text fallback when no usable tool call was extracted
         if not is_tool_call:
+            accept_plain = config.get("plain_text_as_response", True) and not (
+                extract_tools.is_misformatted_tool_request(response)
+            )
+            if accept_plain and transformed not in ("", "{}") and response.strip():
+                # Return the plain reply as a response tool call: no second model
+                # round-trip just to satisfy the tool-call protocol.
+                text = response.strip()
+                llm_result.response = json.dumps(
+                    {"thoughts": [], "tool_name": "response", "tool_args": {"text": text}},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                log_item = self.agent.loop_data.params_temporary.get("log_item_generating")
+                if log_item is not None:
+                    update_log_item(
+                        self.agent,
+                        log_item,
+                        llm_result.response,
+                        update_log=config.get("update_log", False),
+                        raw_response=response,
+                    )
+                return
+
             # Manually add ai response and warnings
             log_item = self.agent.loop_data.params_temporary.get("log_item_generating")
             self.agent.hist_add_ai_response(
