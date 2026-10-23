@@ -1,5 +1,6 @@
 import asyncio
 import paramiko
+import shlex
 import time
 import re
 from typing import Tuple
@@ -85,7 +86,7 @@ class SSHInteractiveSession:
                 # disable systemd/OSC prompt metadata and disable local echo
                 initial_command = f"unset PROMPT_COMMAND PS0; stty -echo; {PAGER_DISABLE_COMMAND}"
                 if self.cwd:
-                    initial_command = f"cd {self.cwd}; {initial_command}"
+                    initial_command = f"cd {shlex.quote(self.cwd)}; {initial_command}"
                 await self.send_command(initial_command)
 
                 # wait for initial prompt/output to settle

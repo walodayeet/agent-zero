@@ -2,6 +2,7 @@ import os
 import platform
 import re
 import select
+import shutil
 import subprocess
 import time
 import sys
@@ -21,10 +22,16 @@ def disable_pagers_in_env(env: dict | None = None) -> dict:
     the code execution tool never receive any user input, so the pager blocks
     forever and spins at 100% CPU per process. Pointing the pager variables at
     ``cat`` lets the output stream through instead. See issue #1697.
+
+    Windows has no guaranteed ``cat.exe``; when it is absent fall back to a
+    PowerShell ``Get-Content`` one-liner, which also streams stdin through.
     """
     env = dict(env if env is not None else os.environ)
-    env["PAGER"] = "cat"
-    env["GIT_PAGER"] = "cat"
+    pager = "cat"
+    if os.name == "nt" and not shutil.which("cat"):
+        pager = "powershell -NoLogo -NoProfile -Command Get-Content"
+    env["PAGER"] = pager
+    env["GIT_PAGER"] = pager
     return env
 
 

@@ -31,6 +31,8 @@
 - `get_platform()`
 - `is_windows()`
 - `get_terminal_executable()`
+  - Windows: `pwsh` when installed (quoted if its path contains spaces), else `powershell.exe`.
+  - POSIX: `shutil.which("bash")` with a `/bin/bash` fallback; the tool's prompt patterns and shell contracts assume bash.
 - Notable constants/configuration names: `T`, `R`.
 
 ## Runtime Contracts

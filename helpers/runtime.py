@@ -278,4 +278,6 @@ def get_terminal_executable():
             return f'"{executable}"'
         return executable
     else:
-        return "/bin/bash"
+        import shutil
+
+        return shutil.which("bash") or "/bin/bash"

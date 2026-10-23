@@ -28,6 +28,7 @@ prompt_patterns: |
   (\(venv\)).+[$#] ?$
   root@[^:]+:[^#]+# ?$
   [a-zA-Z0-9_.-]+@[^:]+:[^$#]+[$#] ?$
+  \[[^\]]*\][#$] ?$
   \(?.*\)?\s*PS\s+[^>]+> ?$
 
 # Dialog detection patterns (one regex per line, case-insensitive)
@@ -35,5 +36,5 @@ prompt_patterns: |
 dialog_patterns: |
   Y/N
   yes/no
-  :\s*$
-  \?\s*$
+  ^[A-Za-z][^:/@()]{0,60}:\s*$
+  ^[A-Za-z][^?@:/()]{0,60}\?\s*$
