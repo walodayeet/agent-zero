@@ -28,12 +28,12 @@ def _repo_id(model: str) -> str:
     return model if "/" in model else f"sentence-transformers/{model}"
 
 
-def _normalizes_output(repo: str, cache_dir: str | None) -> bool:
+def _normalizes_output(repo: str, cache_dir: str | None, **download_kwargs: Any) -> bool:
     """True when the sentence-transformers pipeline ends with a Normalize module."""
     from huggingface_hub import hf_hub_download
 
     try:
-        path = hf_hub_download(repo, "modules.json", cache_dir=cache_dir)
+        path = hf_hub_download(repo, "modules.json", cache_dir=cache_dir, **download_kwargs)
         modules = json.loads(open(path, encoding="utf-8").read())
     except Exception:
         return True  # the MiniLM defaults normalise; keep parity when unsure
@@ -59,8 +59,36 @@ class OnnxSentenceTransformer:
         self.model_name = model
         self.repo = _repo_id(model)
         cache_dir = cache_folder or None
+        model_kwargs = kwargs.get("model_kwargs")
+        model_kwargs = model_kwargs if isinstance(model_kwargs, dict) else {}
+        if kwargs.get("trust_remote_code"):
+            raise ValueError("ONNX backend does not execute trust_remote_code models")
+
+        revision = kwargs.get("revision") or model_kwargs.get("revision")
+        token = (
+            kwargs.get("token")
+            or kwargs.get("use_auth_token")
+            or model_kwargs.get("token")
+            or model_kwargs.get("use_auth_token")
+        )
+        download_kwargs = {
+            key: value
+            for key, value in {
+                "revision": revision,
+                "token": token,
+                "local_files_only": model_kwargs.get("local_files_only"),
+                "force_download": model_kwargs.get("force_download"),
+            }.items()
+            if value is not None
+        }
+
+        def download(filename: str) -> str:
+            return hf_hub_download(
+                self.repo, filename, cache_dir=cache_dir, **download_kwargs
+            )
+
         self._tokenizer = Tokenizer.from_file(
-            hf_hub_download(self.repo, "tokenizer.json", cache_dir=cache_dir)
+            download("tokenizer.json")
         )
         self._tokenizer.enable_truncation(max_length=_MAX_TOKENS)
         self._tokenizer.enable_padding()
@@ -72,12 +100,12 @@ class OnnxSentenceTransformer:
         # off RSS is ~40 MB lower at identical encode speed (measured 47 ms / 20x5).
         options.enable_cpu_mem_arena = False
         self._session = ort.InferenceSession(
-            hf_hub_download(self.repo, "onnx/model.onnx", cache_dir=cache_dir),
+            download("onnx/model.onnx"),
             sess_options=options,
             providers=["CPUExecutionProvider"],
         )
         self._input_names = {item.name for item in self._session.get_inputs()}
-        self._normalize = _normalizes_output(self.repo, cache_dir)
+        self._normalize = _normalizes_output(self.repo, cache_dir, **download_kwargs)
         self._lock = threading.Lock()
 
     # -- inference ---------------------------------------------------------

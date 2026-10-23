@@ -169,7 +169,9 @@ class CodeExecution(Tool):
             else:
                 shell = await shell_pool.take_prewarmed(cwd)
 
-            adopted = shell is not None
+            # Only a local session returned by take_prewarmed() is already connected.
+            # SSH sessions are constructed above and always need connect().
+            adopted = not ssh_enabled and shell is not None
             if shell is None:
                 shell = LocalInteractiveSession(cwd=cwd)
 

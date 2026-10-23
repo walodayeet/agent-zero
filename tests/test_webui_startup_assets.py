@@ -50,10 +50,12 @@ def test_splash_prepares_worker_before_replacing_document_in_place() -> None:
     assert 'fetch("/ui/asset-bundle"' in splash_html
     assert 'const APP_DOCUMENT_PATH = "/ui/index"' in splash_html
     assert "const appDocumentPromise = fetch(APP_DOCUMENT_PATH" in splash_html
-    assert 'navigator.serviceWorker.register(expectedUrl' in splash_html
-    assert "sendBundle(worker, bundle, false)" in splash_html
-    assert "await sendBundle(worker, bundle, true)" not in splash_html
-    # First paint must not wait for the service-worker cache warm-up.
+    assert 'navigator.serviceWorker.register(expectedWorkerUrl' in splash_html
+    assert "await sendBundle(previousWorker, bundle, true)" in splash_html
+    assert "await sendBundle(worker, bundle, true)" in splash_html
+    assert "controllerHasBundle" in splash_html
+    assert 'location.replace("/safe")' in splash_html
+    # First paint waits only for the in-memory bundle acknowledgement; cache writes remain background work.
     assert "initialize().catch(" in splash_html
     assert "replaceWithApp().catch(reportAppLoadFailure)" in splash_html
     assert 'const overlay = document.getElementById("startup-transition")' in splash_html
@@ -62,7 +64,7 @@ def test_splash_prepares_worker_before_replacing_document_in_place() -> None:
     assert "document.open()" in splash_html
     assert "document.write(appWithTransition)" in splash_html
     assert "document.close()" in splash_html
-    assert "location.replace" not in splash_html
+    assert 'location.replace("/safe")' in splash_html
     assert 'const APP_PATH = "/index.html"' not in splash_html
     assert 'fetch("/ui/asset-bundle"' not in index_html
     assert 'id="ui-asset-bundle"' not in index_html

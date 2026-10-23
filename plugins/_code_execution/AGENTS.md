@@ -13,6 +13,7 @@
 
 ## Local Contracts
 
+- `CodeExecution.prepare_state()` treats only a successfully adopted local prewarmed shell as already connected; fresh SSH sessions must always run `connect()`.
 - `extensions/webui/get_process_step_types/code-exe-types.js` registers `code_exe` as a process-step type so raw-log grouping matches the plugin's message renderer.
 
 - Keep session concurrency, timeout, streaming, and reset behavior predictable.

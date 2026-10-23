@@ -1,4 +1,4 @@
-import asyncio, os, sys, platform, errno, signal
+import asyncio, os, sys, platform, errno, signal, subprocess, ntpath
 
 _IS_WIN = platform.system() == "Windows"
 if _IS_WIN:
@@ -360,11 +360,26 @@ async def _spawn_posix_pty(cmd, cwd, env, echo):
 
 
 async def _spawn_winpty(cmd, cwd, env, echo):
-    # Clean PowerShell startup: no logo, no profile, bypass execution policy for deterministic behavior
-    executable = os.path.basename(cmd.strip().split()[0]).lower() if cmd.strip() else ""
+    # Clean PowerShell startup: no logo/profile and deterministic policy. Use
+    # Windows command-line parsing so an absolute executable under Program Files
+    # is not truncated at its first space.
+    import shlex
+
+    try:
+        argv = shlex.split(cmd, posix=False)
+    except ValueError:
+        argv = [cmd]
+    if not argv:
+        raise ValueError("Terminal executable is empty")
+    argv[0] = argv[0].strip('"')
+    executable = ntpath.basename(argv[0]).lower()
     if executable in ("powershell.exe", "powershell", "pwsh.exe", "pwsh"):
-        if "-nolog" not in cmd.lower():
-            cmd = f"{cmd} -NoLogo -NoProfile -ExecutionPolicy Bypass"
+        normalized_args = {arg.lower() for arg in argv[1:]}
+        if "-nologo" not in normalized_args:
+            argv.extend(("-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass"))
+        cmd = subprocess.list2cmdline(argv)
+    elif argv[0] != cmd:
+        cmd = subprocess.list2cmdline(argv)
 
     cols, rows = 80, 25
     child = winpty.PtyProcess.spawn(cmd, dimensions=(rows, cols), cwd=cwd or os.getcwd(), env=env) # type: ignore

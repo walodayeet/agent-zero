@@ -227,12 +227,6 @@ def preload_enabled() -> bool:
     return raw not in ("0", "false", "no", "off")
 
 
-def preload_memory_enabled() -> bool:
-    """A0_PRELOAD_MEMORY=0 keeps the vector-store warm-up on first use."""
-    raw = str(dotenv.get_dotenv_value("A0_PRELOAD_MEMORY", "")).strip().lower()
-    return raw not in ("0", "false", "no", "off")
-
-
 def get_preload_wait_seconds() -> float:
     """How long startup may block on the embedding warm-up.
 
@@ -279,6 +273,9 @@ def get_terminal_executable():
         # the bash-style `&&` the agent writes; use it when installed.
         import shutil
 
-        return shutil.which("pwsh") or "powershell.exe"
+        executable = shutil.which("pwsh") or "powershell.exe"
+        if executable.lower().endswith(".exe") and " " in executable:
+            return f'"{executable}"'
+        return executable
     else:
         return "/bin/bash"

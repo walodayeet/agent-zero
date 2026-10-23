@@ -41,15 +41,17 @@ Paste this file to the next agent maintaining this host/checkout.
   persist the browser timezone (`set_timezone(..., persist=False)`), which used to
   rewrite `.env` and trigger a settings reload on every poll.
   `run-baremetal.ps1` defaults `A0_PRELOAD=1` with `A0_PRELOAD_WAIT=0`, so the
-  embedding model warms in the background after HTTP is up: first-turn memory
-  recall 7.2 s -> 0.08 s, at the cost of ~1.7 GB RSS while unused. Remaining turn
+  embedding model warms in the background after HTTP is up. Vector-store/index
+  initialization remains lazy on first memory use; its startup cost is not included
+  in the model-preload numbers below. Remaining turn
   latency is model-bound: the system prompt is ~68 KB (~15-17 k tokens) with the
   installed plugins, and the gateway needs ~3 s for that prompt vs ~1.4 s for 82
   tokens; prompt assembly itself is ~75 ms.
   Memory footprint per bare-metal instance (Windows 11, measured working set):
   server idle with the embedding model unloaded (`A0_PRELOAD=0`) ~515 MB; after
-  the embedding model is warm (background preload or first chat message)
-  ~0.8-1.0 GB, with commit charge 2-5 GB because torch/faiss reserve arenas.
+  the embedding model is warm (background model preload or first chat message)
+  ~0.8-1.0 GB; vector-store/index initialization is not part of preload and occurs
+  on first memory use.
   The `run-baremetal.ps1` wrapper adds ~140 MB, each open terminal session adds a
   PowerShell process (~75 MB), and the first Browser-tool use leaves a Chromium
   plus its node driver alive (~0.4 GB) until it is closed. The terminal prefers
@@ -89,9 +91,9 @@ Paste this file to the next agent maintaining this host/checkout.
   `ws_per_message_deflate=True`); the 1.1 MB state snapshot for a large chat is
   compressed on the wire. python-socketio's `http_compression` covers the
   polling fallback (default on).
-- Remote terminals use Paramiko; `SSHClient.connect(compress=True)` now
-  compresses the SSH transport, which matters for text-heavy command output on
-  WAN links. Transport keep-alive was already set (5 s).
+- Remote terminals use Paramiko with 5 s transport keepalive. SSH transport
+  compression is intentionally disabled; compression efficiency depends on the
+  remote link and workload and must be benchmarked before enabling by default.
 - Verified in a real browser via CDP: the socket.io handshake answers
   `101` with `Sec-WebSocket-Extensions: permessage-deflate;
   client_max_window_bits=15`, six state frames received in the first seconds.
@@ -134,16 +136,9 @@ Paste this file to the next agent maintaining this host/checkout.
   caching of computed artifacts, process model, event-loop blocking.
 
 ## File discovery (workdir/project tree in the prompt)
-- `_75_include_workdir_extras` used to scan synchronously inside the async
-  prompt build. On the default workdir the tree is ~7.5 k chars and costs
-  ~0.05 s warm; on a project that points at a large checkout the layout
-  signature walk alone costs 0.25-0.6 s (9 k+ entries) and blocked the event
-  loop for every chat. Both `file_tree` and `projects.get_file_structure` now
-  run through `asyncio.to_thread`, so the scan no longer stalls other chats or
-  the WebUI. The rendered prompt is byte-identical (76,834 chars, 68,468 of
-  system text).
-- The tree is still cached by layout signature upstream, so add/remove/rename
-  and modified-time reordering invalidate it; that guarantee is unchanged.
+- `_75_include_workdir_extras` runs project/workdir tree scans through `asyncio.to_thread`, so large directory walks no longer stall the chat event loop. The previous 0.25–0.6 s signature estimate is not a current measured value; signature cost scales with walked directory/file entries and has not been re-benchmarked on the merged Windows tree.
+- `file_tree` text/indent renders are cached by a signature covering all relevant directories (bounded only by configured `max_depth`), entry timestamps for modified/created sorting, and the ignore source. `max_folders`/`max_lines` do not truncate signature traversal because omitted folders still appear in renderer summary output. Structured list modes bypass this cache.
+- Prompt-content byte-equality was verified for the earlier `asyncio.to_thread` change (76,834 total chars, 68,468 system text) before subsequent Windows prompt/cache edits; do not treat that number as a current cross-platform baseline.
 
 ## Non-LLM paths
 - Terminal tool: `get_terminal_output` polled every 0.5 s, so even `echo` cost
@@ -192,9 +187,10 @@ Paste this file to the next agent maintaining this host/checkout.
   server settles at ~500 MB idle and ~690 MB after a turn (commit ~3.5-3.7 GB):
   torch/transformers are never imported, the embedding model loads in ~1.7 s
   instead of ~10 s, vectors are identical to sentence-transformers (max abs diff
-  < 2e-7), and the first recall no longer pays the FAISS load (~2.6 s -> 0.6 s).
-  `A0_EMBEDDING_BACKEND=st` restores sentence-transformers; `A0_PRELOAD_MEMORY=0`
-  keeps the vector-store warm-up on first use. Layer map (working set): app import
+  < 2e-7). `A0_EMBEDDING_BACKEND=st` restores sentence-transformers. Memory
+  vector-store initialization remains first-use lazy; startup preload was removed
+  because it could block the shared event loop and race first-turn DB creation.
+  Layer map (working set): app import
   ~99 MB, plugin/component init +78 MB, ONNX session + vector store +145 MB,
   HTTP stack (uvicorn/socketio/a2wsgi/Flask) ~+175 MB, first LLM call (litellm
   +138 MB, faiss +23 MB).

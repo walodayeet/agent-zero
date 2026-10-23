@@ -221,9 +221,9 @@ class UiServerRuntime:
 
         WerkzeugRequest.max_form_memory_size = UPLOAD_LIMIT_BYTES
         webapp.config.update(
-            # Static UI assets (JS/CSS/components) keep an ETag; without max-age
-            # Flask sends `no-cache`, so every page load revalidated ~200 files.
-            SEND_FILE_MAX_AGE_DEFAULT=3600,
+            # Assets have stable, unhashed URLs. Keep ETag revalidation so a
+            # server update, /safe recovery, or plugin update cannot serve stale JS.
+            SEND_FILE_MAX_AGE_DEFAULT=None,
             JSON_SORT_KEYS=False,
             SESSION_COOKIE_NAME="session_" + runtime.get_runtime_id(),
             SESSION_COOKIE_SAMESITE="Lax",

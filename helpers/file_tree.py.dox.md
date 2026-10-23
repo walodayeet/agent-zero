@@ -35,7 +35,7 @@
 
 ## Runtime Contracts
 
-- `file_tree()` caches text/indent renders (`_TREE_CACHE`) against a layout signature: every directory mtime plus, when sorting by `created`/`modified`, each entry's mtime/ctime, plus the ignore source (`file:` target mtime+size or inline text hash). Hidden (dot) entries are part of the signature because the renderer only prunes through the ignore spec; directories matched by that spec are skipped only when they contain no visible entries (matching the renderer's `_directory_has_visible_entries` rule). Added/removed/renamed entries, edited files that change ordering, ignore-file edits, and changes under dot directories all invalidate; structured list modes are never cached.
+- `file_tree()` caches text/indent renders (`_TREE_CACHE`) against a full layout signature: all directories up to `max_depth`, entry mtime/ctime when sorting by `created`/`modified`, plus the ignore source (`file:` target mtime+size or inline text hash). The signature deliberately does not truncate at `max_folders` or `max_lines`: the renderer also emits summaries for omitted folders, so their descendants can affect output. Hidden (dot) entries are included unless excluded by the ignore spec; ignored directories are skipped only when they contain no visible descendants. Structured list modes are never cached.
 - Helper modules own reusable framework APIs and must preserve public callers unless all callers, tests, and docs are updated together.
 - Update this file whenever public functions, classes, persistence behavior, path/security assumptions, side effects, or cross-module contracts change.
 - Observed side-effect areas: filesystem reads, subprocess/runtime control, WebSocket state.

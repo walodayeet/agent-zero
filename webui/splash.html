@@ -41,6 +41,12 @@
             const CACHE_TIMEOUT_MS = 10000
             const FALLBACK_TIMEOUT_MS = 15000
             let replacementStarted = false
+            let bundleReady = false
+            let controllerHasBundle = false
+            let expectedWorkerUrl = ""
+            let bundleReadyPromise
+            let resolveBundleReady
+            bundleReadyPromise = new Promise((resolve) => { resolveBundleReady = resolve })
 
             const appDocumentPromise = fetch(APP_DOCUMENT_PATH, {
                 cache: "no-store",
@@ -54,6 +60,18 @@
             const replaceWithApp = async () => {
                 if (replacementStarted) return
                 const appHtml = await appDocumentPromise
+                if (!bundleReady) {
+                    await Promise.race([
+                        bundleReadyPromise,
+                        new Promise((resolve) => setTimeout(resolve, CACHE_TIMEOUT_MS)),
+                    ])
+                }
+                if (navigator.serviceWorker?.controller && !controllerHasBundle) {
+                    // Never let a previous worker serve cache-first JS while the new
+                    // document starts. On timeout, use /safe to bypass every worker.
+                    location.replace("/safe")
+                    return
+                }
                 if (replacementStarted) return
                 replacementStarted = true
                 const overlay = document.getElementById("startup-transition")
@@ -164,7 +182,11 @@
             }
 
             const initialize = async () => {
-                if (!navigator.serviceWorker) return
+                if (!navigator.serviceWorker) {
+                    bundleReady = true
+                    resolveBundleReady()
+                    return
+                }
                 const response = await fetch("/ui/asset-bundle", {
                     cache: "no-cache",
                     credentials: "same-origin",
@@ -180,29 +202,46 @@
                         .map((registration) => registration.unregister()),
                 )
 
-                const expectedUrl = new URL(
+                expectedWorkerUrl = new URL(
                     `/sw.js?version=${encodeURIComponent(bundle.version)}`,
                     location.origin,
                 ).href
+
                 const previousWorker = navigator.serviceWorker.controller
-                if (previousWorker && previousWorker.scriptURL !== expectedUrl) {
-                    sendBundle(previousWorker, bundle, false).catch(() => undefined)
+                if (previousWorker) {
+                    // Update the current controller's in-memory map before app
+                    // modules load, closing its stale-cache window.
+                    await sendBundle(previousWorker, bundle, true)
+                    controllerHasBundle = true
+                } else {
+                    controllerHasBundle = true
                 }
 
-                const registration = await navigator.serviceWorker.register(expectedUrl, {
+                const registration = await navigator.serviceWorker.register(expectedWorkerUrl, {
                     scope: "/",
                     updateViaCache: "none",
                 })
-                const worker = await waitForExpectedWorker(registration, expectedUrl)
-                // Warm the service-worker cache in the background. The backend
-                // serves the same files, so first paint does not wait for ~3 MB of
-                // cache writes; the app document is written immediately below.
-                sendBundle(worker, bundle, false).catch(() => undefined)
+                const worker = await waitForExpectedWorker(registration, expectedWorkerUrl)
+                // Prime the activated worker's in-memory map before releasing the
+                // app document. The acknowledgement precedes its script fetches;
+                // Cache Storage persistence still continues in the background.
+                await sendBundle(worker, bundle, true)
+                bundleReady = true
+                resolveBundleReady()
             }
 
-            initialize().catch((error) =>
-                console.warn("WebUI bootstrap cache unavailable.", error),
-            )
+            initialize().catch((error) => {
+                console.warn("WebUI bootstrap cache unavailable.", error)
+                const controller = navigator.serviceWorker?.controller
+                if (controller && expectedWorkerUrl && controller.scriptURL !== expectedWorkerUrl) {
+                    // Do not run a new shell against stale cache-first assets.
+                    location.replace("/safe")
+                    return
+                }
+                controllerHasBundle = !controller || controller.scriptURL === expectedWorkerUrl
+                bundleReady = true
+                resolveBundleReady()
+            })
             clearTimeout(fallbackTimer)
             replaceWithApp().catch(reportAppLoadFailure)
         })()

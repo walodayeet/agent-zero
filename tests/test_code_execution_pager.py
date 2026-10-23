@@ -7,12 +7,13 @@ code execution tool: without user input they block forever and spin at 100% CPU.
 import asyncio
 import os
 import importlib
+import subprocess
 from types import SimpleNamespace
 
 import pytest
 
 from plugins._code_execution.helpers import shell_local, shell_ssh
-from plugins._code_execution.helpers.tty_session import TTYSession
+from plugins._code_execution.helpers.tty_session import TTYSession, _spawn_winpty
 from plugins._code_execution.tools.code_execution_tool import (
     CodeExecution,
     ShellWrap,
@@ -72,6 +73,39 @@ def test_exited_tty_process_is_a_recoverable_closed_session():
     assert _is_closed_pty_error(RuntimeError("TTYSpawn process has exited"))
 
 
+def test_windows_power_shell_path_with_spaces_gets_deterministic_flags(monkeypatch):
+    captured = {}
+
+    class FakeChild:
+        pid = 123
+        def isalive(self):
+            return False
+        def read(self, _size):
+            return ""
+        def write(self, _data):
+            return None
+
+    class FakePtyProcess:
+        @staticmethod
+        def spawn(cmd, **kwargs):
+            captured["cmd"] = cmd
+            return FakeChild()
+
+    import plugins._code_execution.helpers.tty_session as tty_module
+    monkeypatch.setattr(tty_module, "_IS_WIN", True)
+    monkeypatch.setattr(tty_module, "winpty", SimpleNamespace(PtyProcess=FakePtyProcess), raising=False)
+    path = r"C:\Program Files\PowerShell\7\pwsh.exe"
+    argv = [path]
+    cmd = subprocess.list2cmdline(argv)
+
+    async def run():
+        await _spawn_winpty(cmd, None, {}, False)
+
+    asyncio.run(run())
+    parsed = subprocess.list2cmdline([path, "-NoLogo", "-NoProfile", "-ExecutionPolicy", "Bypass"])
+    assert captured["cmd"] == parsed
+
+
 def test_tty_close_kills_term_resistant_process():
     async def run():
         session = TTYSession("bash -lc 'trap \"\" TERM; sleep 30'")
@@ -121,6 +155,54 @@ def test_ssh_session_reports_channel_exit_status():
 
     assert session.is_terminated()
     assert session.get_exit_code() == 7
+
+
+def test_prepare_state_connects_new_ssh_session(monkeypatch):
+    import plugins._code_execution.tools.code_execution_tool as code_module
+
+    calls = []
+
+    class FreshSSH:
+        def __init__(self, *args, **kwargs):
+            self.cwd = kwargs.get("cwd")
+            self.connected = False
+
+        async def connect(self):
+            calls.append("connect")
+            self.connected = True
+
+        async def close(self):
+            calls.append("close")
+
+    async def resolve_pass(value):
+        return value
+
+    monkeypatch.setattr(code_module, "SSHInteractiveSession", FreshSSH)
+    monkeypatch.setattr(code_module, "_resolve_ssh_pass", resolve_pass)
+    monkeypatch.setattr(code_module.shell_pool, "ensure_prewarm", lambda _cwd: None)
+
+    class FakeAgent:
+        context = SimpleNamespace(log=None)
+        def __init__(self):
+            self.data = {}
+        def get_data(self, key):
+            return self.data.get(key)
+        def set_data(self, key, value):
+            self.data[key] = value
+
+    async def run():
+        tool = CodeExecution(FakeAgent(), "code_execution_tool", None, {}, "", None)
+        async def ensure_cwd():
+            return "C:/work"
+        tool.ensure_cwd = ensure_cwd
+        state = await tool.prepare_state(
+            {"ssh_enabled": True, "ssh_pass": "pw", "ssh_addr": "host", "ssh_port": 22, "ssh_user": "user"},
+            session=0,
+        )
+        assert state.shells[0].session.connected
+
+    asyncio.run(run())
+    assert calls == ["connect"]
 
 
 def test_code_execution_returns_immediately_when_shell_exits():
