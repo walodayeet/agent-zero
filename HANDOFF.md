@@ -133,6 +133,18 @@ Paste this file to the next agent maintaining this host/checkout.
 - Performance work must stay architectural: terminal I/O, startup/restore,
   caching of computed artifacts, process model, event-loop blocking.
 
+## File discovery (workdir/project tree in the prompt)
+- `_75_include_workdir_extras` used to scan synchronously inside the async
+  prompt build. On the default workdir the tree is ~7.5 k chars and costs
+  ~0.05 s warm; on a project that points at a large checkout the layout
+  signature walk alone costs 0.25-0.6 s (9 k+ entries) and blocked the event
+  loop for every chat. Both `file_tree` and `projects.get_file_structure` now
+  run through `asyncio.to_thread`, so the scan no longer stalls other chats or
+  the WebUI. The rendered prompt is byte-identical (76,834 chars, 68,468 of
+  system text).
+- The tree is still cached by layout signature upstream, so add/remove/rename
+  and modified-time reordering invalidate it; that guarantee is unchanged.
+
 ## Non-LLM paths
 - Terminal tool: `get_terminal_output` polled every 0.5 s, so even `echo` cost
   ~0.64 s; it now polls every 0.1 s (~0.15-0.2 s). ConPTY re-renders the typed

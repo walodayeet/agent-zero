@@ -1,3 +1,5 @@
+import asyncio
+
 from helpers.extension import Extension
 from agent import LoopData
 from helpers import projects
@@ -34,7 +36,10 @@ class IncludeWorkdirExtras(Extension):
 
             folder = files.display_path(projects.get_project_folder(project_name))
 
-            file_structure = projects.get_file_structure(
+            # The scan is synchronous and can take hundreds of ms on a large
+            # project; keep it off the shared event loop.
+            file_structure = await asyncio.to_thread(
+                projects.get_file_structure,
                 project_name,
                 output_mode=file_tree.OUTPUT_MODE_INDENT,
             )
@@ -56,8 +61,10 @@ class IncludeWorkdirExtras(Extension):
 
             files.create_dir(scan_path)
 
+            # Same for the default workdir scan; it may walk a large tree.
             file_structure = str(
-                file_tree.file_tree(
+                await asyncio.to_thread(
+                    file_tree.file_tree,
                     scan_path,
                     max_depth=max_depth,
                     max_files=max_files,
