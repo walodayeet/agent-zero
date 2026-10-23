@@ -92,6 +92,16 @@ Paste this file to the next agent maintaining this host/checkout.
 - Remote terminals use Paramiko; `SSHClient.connect(compress=True)` now
   compresses the SSH transport, which matters for text-heavy command output on
   WAN links. Transport keep-alive was already set (5 s).
+- Verified in a real browser via CDP: the socket.io handshake answers
+  `101` with `Sec-WebSocket-Extensions: permessage-deflate;
+  client_max_window_bits=15`, six state frames received in the first seconds.
+- Measured on this host after the transport changes: cold start to health `5.7 s`,
+  first turn `6.3 s` (cold prompt/model caches), warm turn `3.4 s`, restore of
+  67 chats `0.5 s`, WebUI boot to chat list `~2.8 s`, 200 keep-alive health
+  requests `0.94 s`.
+- Tried and reverted: warming the system prompt in a startup task. It cut the
+  first prompt build 0.59 s -> 0.08 s but raised cold start 5.7 s -> 8.4 s
+  because `initialize_agent()` runs a second time. Startup wins.
 - Tried and reverted: serving component HTML from `/ui/asset-bundle` on first
   load. The bundle is 259 files / 3.1 MB and resolves after most components have
   already started loading, so it added bytes without cutting the 60-64 component
