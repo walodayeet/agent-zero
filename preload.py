@@ -29,17 +29,24 @@ async def preload():
                 await Memory.get_by_subdir("default")
             except Exception:
                 pass
-        # Warm the skill catalog: parsing every SKILL.md frontmatter is the
-        # first prompt build's hot spot (~0.4-0.8 s on this machine).
-        try:
-            from helpers import skills as skills_helper
-
-            await asyncio.to_thread(skills_helper.list_skills)
-        except Exception:
-            pass
+        await warm_skills()
         PrintStyle().print("Preload completed.")
     except Exception as e:
         PrintStyle().error(f"Error in preload: {e}")
+
+
+async def warm_skills():
+    """Parse the skill catalog off the event loop.
+
+    The first system-prompt build otherwise parses every SKILL.md frontmatter
+    (~0.3-0.8 s). Runs even when A0_PRELOAD=0, where it is the only startup warm.
+    """
+    try:
+        from helpers import skills as skills_helper
+
+        await asyncio.to_thread(skills_helper.list_skills)
+    except Exception:
+        pass
 
 
 async def warmup_llm():

@@ -72,10 +72,13 @@ _llm_warmup_task = None
 @extension.extensible
 def initialize_preload():
     global _llm_warmup_task
+    import preload
     if not runtime.preload_enabled():
         PrintStyle().print("Embedding preload disabled (A0_PRELOAD=0); loading on first use.")
+        # The skill catalog is cheap and has no model payload, so warm it even
+        # when the embedding/vector-store preload is disabled (Linux default).
+        defer.DeferredTask().start_task(preload.warm_skills)
         return None
-    import preload
     if _llm_warmup_task is None:
         # Separate task: importing LiteLLM must not delay the embedding/vector
         # store readiness that startup (and tests) wait on.

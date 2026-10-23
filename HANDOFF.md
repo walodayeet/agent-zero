@@ -74,6 +74,18 @@ Paste this file to the next agent maintaining this host/checkout.
   `A0_COMPACT_PROMPTS=0` restores the full prompt; tests run with it unset and
   `tests/test_prompt_compact.py` covers the compactor.
 
+## Linux parity
+- `run-baremetal.sh` already exports the same knobs the Windows launcher sets:
+  `KMP_DUPLICATE_LIB_OK=TRUE` (same duplicate-OpenMP abort), `A0_COMPACT_PROMPTS=1`
+  and the ONNX embedding backend; `install-baremetal.sh --systemd` generates a
+  systemd --user unit that runs the launcher with `Restart=on-failure`, which is
+  the Linux equivalent of the Windows scheduled tasks (no cron watchdog needed).
+- `initialize_preload()` now starts `preload.warm_skills` even when
+  `A0_PRELOAD=0` (the Linux default), so the first prompt build does not parse
+  the 233 SKILL.md files. Embeddings/vector store still load lazily there.
+- The terminal poll/echo fix, the UI cache headers and the compact prompts are
+  platform-neutral Python and apply on Linux unchanged.
+
 ## UI and process health
 - Static UI files were served with `Cache-Control: no-cache`, so every page load
   revalidated ~200 JS/CSS/component files; Flask now sets
