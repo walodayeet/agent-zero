@@ -73,7 +73,9 @@ app shell.
 
 ### Session loading with real chat history
 
-39 real chats (2.1 MB of `chat.json`): warm reload app-ready **2.36–2.41 s**;
+39 real chats (2.1 MB of `chat.json`): warm reload app-ready **2.4–3.6 s** on a
+loaded host (run under the supervised launcher; nohup-started test servers can be
+reaped with the harness shell, which produced misleading crash observations);
 cold first load (service-worker cache cleared) **~5.2 s**. The initial Socket.IO
 state is only **14 KB / 6 frames**, so the time is UI boot and chat-list rendering
 (39 `.chat-tree-item` nodes), not history transfer. Empty chat list is 1.5 s warm.
