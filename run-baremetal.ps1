@@ -90,21 +90,22 @@ foreach ($dir in $dirs) {
     New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot "usr\$dir") | Out-Null
 }
 
-if (-not $env:ALLOWED_ORIGINS) {
-    $origins = @("http://localhost:$port", "http://127.0.0.1:$port")
-    if ($hostAddr -in @("0.0.0.0", "::")) {
-        $hostName = $env:COMPUTERNAME
-        if ($hostName) { $origins += "http://${hostName}:$port" }
-        try {
-            $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } |
-                Select-Object -First 1 -ExpandProperty IPAddress)
-            if ($ip) { $origins += "http://${ip}:$port" }
-        } catch { }
-    } else {
-        $origins += "http://${hostAddr}:$port"
-    }
-    $env:ALLOWED_ORIGINS = ($origins | Select-Object -Unique) -join ","
+$origins = @("http://localhost:$port", "http://127.0.0.1:$port")
+if ($hostAddr -in @("0.0.0.0", "::")) {
+    $hostName = $env:COMPUTERNAME
+    if ($hostName) { $origins += "http://${hostName}:$port" }
+    try {
+        $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } |
+            Select-Object -First 1 -ExpandProperty IPAddress)
+        if ($ip) { $origins += "http://${ip}:$port" }
+    } catch { }
+} else {
+    $origins += "http://${hostAddr}:$port"
 }
+if ($env:ALLOWED_ORIGINS) {
+    $origins += $env:ALLOWED_ORIGINS -split ','
+}
+$env:ALLOWED_ORIGINS = (($origins | ForEach-Object { $_.Trim() } | Where-Object { $_ }) | Select-Object -Unique) -join ","
 
 & $python run_ui.py "--host=$hostAddr" "--port=$port" @args

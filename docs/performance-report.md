@@ -30,13 +30,18 @@ medians are warm turns.
 
 The largest single win was protocol handling: when the model answered in plain
 text, `_context_doctor` used to keep it as “thoughts”, skip processing and spend a
-second model call on a tool-call reminder. It now converts the plain reply into a
-`response` tool call and finishes the turn (`plain_text_as_response: true`,
-configurable). Tool-call turns already used one call; they benefit from the
-existing terminal/preload work and `uvloop`/`httptools`.
+second model call on a tool-call reminder. It now converts a genuine plain reply
+into a `response` tool call and finishes the turn (`plain_text_as_response: auto`).
+Pre-tool narration is still retried so tool use is never silently dropped;
+`true` forces acceptance, `false` restores the upstream retry. Tool-call turns
+already used one call; they benefit from the existing terminal/preload work and
+`uvloop`/`httptools`.
 
 Hermes numbers are from the shared-host head-to-head recorded in `HANDOFF.md`
-(same gateway and model, fresh context per turn). A fresh Hermes interactive
+(same gateway and model, fresh context per turn). That Hermes install is heavily
+extended (many plugins, gateway platforms and memory/tooling hooks); its turn
+latency therefore includes plugin overhead that a minimal A0 checkout does not
+share, and A0's own full plugin set is included in the numbers above. A fresh Hermes interactive
 client could not re-run here: the running Hermes gateway rejects a second
 interactive peer (`invalid_control_peer`) and its dashboard requires the owner's
 password. Its OpenAI-compatible `api_server` platform is enabled in config but
@@ -86,4 +91,5 @@ app shell.
 3. Chat persistence and log streaming: ~0.1 s per turn; batching writes would
    shave a small constant.
 4. Hermes dashboard comparison requires the owner password or a dedicated
-   benchmark profile; add it when credentials are available.
+   isolated profile; add it when credentials are available. Until then the
+   cross-agent KPI is turn latency, not "send → first rendered token" in each UI.

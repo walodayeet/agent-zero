@@ -134,10 +134,11 @@ Paste this file to the next agent maintaining this host/checkout.
   was reverted; prompts are never traded for tokens.
 - Performance work must stay architectural: terminal I/O, startup/restore,
   caching of computed artifacts, process model, event-loop blocking.
-- `_context_doctor` accepts a plain-text model reply as a `response` tool call by
-  default (`plain_text_as_response: true`) instead of spending a second model call
-  on a tool-call reminder. Set it to false to restore the retry behavior; prompts
-  are unchanged.
+- `_context_doctor` accepts a genuine plain-text model reply as a `response` tool
+  call instead of spending a second model call on a tool-call reminder. Default is
+  `plain_text_as_response: auto`: pre-tool narration ("let me check …") still
+  retries; `true` always accepts, `false` keeps the upstream retry. Prompts are
+  unchanged.
 
 ## File discovery (workdir/project tree in the prompt)
 - `_75_include_workdir_extras` runs project/workdir tree scans through `asyncio.to_thread`, so large directory walks no longer stall the chat event loop. The previous 0.25–0.6 s signature estimate is not a current measured value; signature cost scales with walked directory/file entries and has not been re-benchmarked on the merged Windows tree.
@@ -169,7 +170,7 @@ Paste this file to the next agent maintaining this host/checkout.
   completion. Agent Zero is timed over `api/message_async` (fresh context) to the
   turn's `response` log entry. Tasks run interleaved (A0 then Hermes per rep) so
   gateway drift hits both, five reps, one warm-up each.
-- 2026-10-23 linux-branch medians after accepting plain-text replies as responses
+- 2026-10-23 linux-branch medians with `plain_text_as_response: auto`
   (no second model call): PONG 1.38 s, terminal tool 2.92 s, explanation 1.60 s.
   Detail and reproduction: `docs/performance-report.md`, `scripts/bench/bench.py`.
 - Earlier medians with the full prompt restored (2026-10-23, fresh context per turn):

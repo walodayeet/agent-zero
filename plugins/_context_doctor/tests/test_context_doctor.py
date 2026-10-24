@@ -382,3 +382,43 @@ def test_plain_text_is_returned_as_response_without_retry(monkeypatch):
     parsed = json.loads(llm_result.response)
     assert parsed["tool_name"] == "response"
     assert parsed["tool_args"]["text"] == "Hello there"
+
+
+def _run_plain(monkeypatch, response, setting):
+    monkeypatch.setattr(
+        "plugins._context_doctor.extensions.python.message_loop_result._10_context_doctor.get_plugin_config",
+        lambda *args, **kwargs: {
+            "suppress_xml": True,
+            "update_log": False,
+            "plain_text_as_response": setting,
+        },
+    )
+    log_item = SimpleNamespace(
+        id="generating", kvps={"reasoning": "thinking"},
+        update=lambda **kwargs: setattr(log_item, "data", kwargs),
+    )
+    agent = SimpleNamespace(
+        agent_name="A0",
+        context=SimpleNamespace(log=SimpleNamespace(log=lambda **kwargs: None)),
+        loop_data=SimpleNamespace(params_temporary={"log_item_generating": log_item}),
+        read_prompt=lambda name, **kwargs: "",
+        hist_add_ai_response=lambda message, **kwargs: SimpleNamespace(id="ai"),
+        hist_add_warning=lambda message: SimpleNamespace(id="warning"),
+    )
+    llm_result = LLMResult.from_chat(response=response)
+    result_data = {"llm_result": llm_result}
+    ContextDoctor(agent).execute(result_data)
+    return result_data, llm_result
+
+
+def test_auto_accepts_genuine_plain_answer(monkeypatch):
+    result_data, llm_result = _run_plain(monkeypatch, "The answer is 4.", "auto")
+    assert not result_data.get("skip_default_processing")
+    assert json.loads(llm_result.response)["tool_args"]["text"] == "The answer is 4."
+
+
+def test_auto_retries_pre_tool_narration(monkeypatch):
+    result_data, llm_result = _run_plain(
+        monkeypatch, "Let me check the running process first.", "auto"
+    )
+    assert result_data.get("skip_default_processing") is True
