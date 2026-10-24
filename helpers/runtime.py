@@ -2,6 +2,11 @@ import argparse
 from urllib.parse import urlsplit, urlunsplit
 import inspect
 import os
+
+# onnxruntime and the faiss/sklearn stack each ship an OpenMP runtime; Intel's
+# guard aborts the process on the duplicate. Launchers exported this, but direct
+# `python run_ui.py`/systemd/harness runs need the same protection.
+os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 import secrets
 from pathlib import Path
 from typing import TypeVar, Callable, Awaitable, Union, overload, cast
@@ -48,6 +53,10 @@ def initialize():
             args[key] = value
 
     ensure_loopback_no_proxy()
+    if is_local_runtime():
+        # Keep direct launches consistent with run-baremetal.sh.
+        os.environ.setdefault("A0_EMBEDDING_BACKEND", "onnx")
+        os.environ.setdefault("A0_PRELOAD_WAIT", "0")
 
 
 def get_arg(name: str):

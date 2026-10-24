@@ -264,6 +264,9 @@ environmental (Docker socket, credentials, external services, root installers).
 - `runtime.normalize_local_url()` rewrites `localhost` → `127.0.0.1` for model
   `api_base` values in bare-metal mode (IPv4-only local gateways). Docker mode is
   unchanged. `run-baremetal.sh`/`.ps1` append loopback hosts to `NO_PROXY`.
+- Core `helpers/runtime.py` sets `KMP_DUPLICATE_LIB_OK=TRUE` at import and, for bare
+  metal, defaults `A0_EMBEDDING_BACKEND=onnx`/`A0_PRELOAD_WAIT=0`, so direct
+  `python run_ui.py`, systemd and harness launches match `run-baremetal.sh`.
 - Model search honors a custom `api_base` for providers whose metadata ships an
   absolute endpoint (e.g. OpenAI) and bypasses proxy env for loopback hosts.
 - `runtime.initialize()` appends loopback hosts to `NO_PROXY` on bare metal, so

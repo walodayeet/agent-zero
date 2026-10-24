@@ -71,6 +71,13 @@ The authenticated Hermes dashboard was not benchmarked (auth-gated). Its public
 login page is tiny (4 requests, FCP 68–300 ms), so it is not a fair proxy for the
 app shell.
 
+### Session loading with real chat history
+
+39 real chats (2.1 MB of `chat.json`): warm reload app-ready **2.36–2.41 s**;
+cold first load (service-worker cache cleared) **~5.2 s**. The initial Socket.IO
+state is only **14 KB / 6 frames**, so the time is UI boot and chat-list rendering
+(39 `.chat-tree-item` nodes), not history transfer. Empty chat list is 1.5 s warm.
+
 ### UI experiments measured and rejected
 
 - ASGI `StaticFiles` mounts for `/js`, `/css`, `/components`, `/vendor`,
