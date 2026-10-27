@@ -52,6 +52,10 @@ async def build_prompt(agent: Agent) -> str:
         for tool in tool_policy.filter_tool_prompts(agent, tool_prompts)
         if tool
     ]
+    # Prompt budget: verbose tool docs (long envelopes/examples) dominate every
+    # model call. Keep the contract, trim trailing prose/examples.
+    if os.environ.get("A0_COMPACT_TOOLS", "0") == "1":
+        tools = [_compact_tool_doc(t, 2400) for t in tools]
     tools_str = "\n\n".join(tools)
     prompt = agent.read_prompt("agent.system.tools.md", tools=tools_str)
 
@@ -66,3 +70,12 @@ async def build_prompt(agent: Agent) -> str:
         prompt += "\n\n" + agent.read_prompt("agent.system.tools_vision.md")
 
     return prompt
+
+
+def _compact_tool_doc(text: str, limit: int) -> str:
+    if len(text) <= limit:
+        return text
+    cut = text.rfind("\n\n", 0, limit)
+    if cut < limit // 2:
+        cut = limit
+    return text[:cut].rstrip() + "\n... (examples truncated)"

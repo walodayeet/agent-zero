@@ -228,3 +228,27 @@ def test_bundle_recursively_scans_a_caller_supplied_entry(
     index_bundle = ui_bundler.get_ui_asset_bundle(["/index.html"], agent=None)
     assert set(index_bundle["files"]) == {"/index.html"}
     assert index_bundle["version"] != bundle["version"]
+
+
+def test_lazy_mode_omits_extension_entries(tmp_path: Path, monkeypatch) -> None:
+    webui = tmp_path / "webui"
+    webui.mkdir()
+    (webui / "index.html").write_text(
+        '<script src="/index.js"></script>', encoding="utf-8"
+    )
+    (webui / "index.js").write_text("export const ok = true;", encoding="utf-8")
+    extension_root = tmp_path / "extensions" / "webui"
+    plugin_root = tmp_path / "plugins" / "example" / "webui"
+    (extension_root / "sidebar").mkdir(parents=True)
+    (extension_root / "sidebar" / "entry.html").write_text(
+        "<div>plugin</div>", encoding="utf-8"
+    )
+    plugin_root.mkdir(parents=True)
+    configure_roots(tmp_path, monkeypatch, extension_root, plugin_root)
+    monkeypatch.setenv("A0_LAZY_WEBUI", "1")
+
+    bundle = ui_bundler.get_ui_asset_bundle(["/index.html"], agent=None)
+
+    assert "/index.html" in bundle["files"]
+    assert "/index.js" in bundle["files"]
+    assert "/extensions/webui/sidebar/entry.html" not in bundle["files"]

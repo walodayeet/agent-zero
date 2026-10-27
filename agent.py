@@ -1,4 +1,4 @@
-import asyncio, json, random, re, string, threading, time
+import asyncio, contextvars, json, random, re, string, threading, time
 
 from collections import OrderedDict
 from dataclasses import dataclass, field
@@ -19,6 +19,8 @@ from helpers import (
     subagents,
 )
 from helpers import extension
+from helpers.turn_metrics import TurnMetrics
+from helpers import turn_journal
 from helpers.print_style import PrintStyle
 
 from langchain_core.prompts import (
@@ -119,6 +121,12 @@ class AgentContext:
     @staticmethod
     def use(id: str):
         context = AgentContext.get(id)
+        if not context and id:
+            # Lazy chats: hydrate a saved chat before anything creates a new
+            # context with the same id (which would overwrite it on save).
+            from helpers import persist_chat
+
+            context = persist_chat.load_chat(id)
         if context:
             AgentContext.set_current(id)
         else:
@@ -153,11 +161,15 @@ class AgentContext:
         def generate_short_id():
             return "".join(random.choices(string.ascii_letters + string.digits, k=8))
 
+        from helpers import persist_chat
+
         while True:
             short_id = generate_short_id()
             with AgentContext._contexts_lock:
                 if short_id not in AgentContext._contexts:
-                    return short_id
+                    # Lazy chats: never reuse an id that still has a saved chat.
+                    if not persist_chat.chat_file_exists(short_id):
+                        return short_id
 
     @classmethod
     def get_notification_manager(cls):
@@ -342,7 +354,18 @@ class UserMessage:
 
 
 class LoopData:
+    @property
+    def current_tool(self):
+        return self._current_tool.get()
+
+    @current_tool.setter
+    def current_tool(self, tool):
+        self._current_tool.set(tool)
+
     def __init__(self, **kwargs):
+        self._current_tool = contextvars.ContextVar(
+            f"a0_current_tool_{id(self)}", default=None
+        )
         self.iteration = -1
         self.system = []
         self.user_message: history.Message | None = None
@@ -359,6 +382,25 @@ class LoopData:
         # override values with kwargs
         for key, value in kwargs.items():
             setattr(self, key, value)
+
+
+def _is_fallback_error(exc: Exception) -> bool:
+    status = getattr(exc, "status_code", None)
+    if isinstance(status, int):
+        return status in (401, 402, 403, 408, 429) or status >= 500
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError, ConnectionError)):
+        return True
+    try:
+        import openai
+
+        if isinstance(
+            exc,
+            (openai.APIConnectionError, openai.APITimeoutError),
+        ):
+            return True
+    except Exception:
+        pass
+    return False
 
 
 class Agent:
@@ -392,8 +434,23 @@ class Agent:
 
         extension.call_extensions_sync("agent_init", self)
 
+    def _journal_ctx(self) -> str:
+        return getattr(getattr(self, "context", None), "id", "")
+
     @extension.extensible
     async def monologue(self):
+        # The static system prompt is stable for the duration of one turn.
+        # Reuse it so tool-result -> next-model-call does not re-render tools,
+        # skills, presets and prompt includes every iteration.
+        self._system_prompt_cache = None
+        self._turn_started = time.perf_counter()
+        try:
+            _metrics_model = getattr(self.get_chat_model(), "model_name", "")
+        except Exception:
+            _metrics_model = ""
+        self._turn_metrics = TurnMetrics(self._journal_ctx(), _metrics_model)
+        turn_journal.append(self._journal_ctx(), "turn_start")
+        _turn_status = "ok"
         while True:
             try:
                 # loop data dictionary to pass to extensions
@@ -423,6 +480,41 @@ class Agent:
                     await self.handle_intervention()
 
                     try:
+                        try:
+                            from helpers import settings as _settings
+
+                            _max_turns = int(_settings.get_settings().get("agent_max_turns") or 0) or int(__import__("os").environ.get("A0_MAX_TURNS", "0"))
+                        except Exception:
+                            _max_turns = int(__import__("os").environ.get("A0_MAX_TURNS", "0"))
+                        if _max_turns > 0 and self.loop_data.iteration >= _max_turns:
+                            _turn_status = "max_turns"
+                            turn_journal.append(self._journal_ctx(), "max_turns", limit=_max_turns)
+                            result = await self._execute_tool_request(
+                                tool_name="response",
+                                tool_args={
+                                    "text": f"Stopped after {_max_turns} model turns (agent_max_turns)."
+                                },
+                                message="",
+                            )
+                            return result
+
+                        try:
+                            _turn_timeout = int(
+                                _settings.get_settings().get("agent_turn_timeout_seconds") or 0
+                            ) or int(__import__("os").environ.get("A0_TURN_TIMEOUT", "0"))
+                        except Exception:
+                            _turn_timeout = int(__import__("os").environ.get("A0_TURN_TIMEOUT", "0"))
+                        if _turn_timeout > 0 and time.perf_counter() - self._turn_started > _turn_timeout:
+                            _turn_status = "timeout"
+                            turn_journal.append(self._journal_ctx(), "turn_timeout", limit=_turn_timeout)
+                            return await self._execute_tool_request(
+                                tool_name="response",
+                                tool_args={
+                                    "text": f"Stopped after {_turn_timeout}s (agent_turn_timeout_seconds)."
+                                },
+                                message="",
+                            )
+
                         # prepare LLM chain (model, system, history)
                         prompt = await self.prepare_prompt(loop_data=self.loop_data)
 
@@ -554,6 +646,7 @@ class Agent:
 
             # exceptions outside message loop:
             except Exception as e:
+                _turn_status = "error"
                 await self.handle_exception("monologue", e)
             finally:
                 self.context.streaming_agent = None  # unset current streamer
@@ -562,25 +655,52 @@ class Agent:
                     await extension.call_extensions_async(
                         "monologue_end", self, loop_data=self.loop_data
                     )  # type: ignore
+                try:
+                    await extension.call_extensions_async(
+                        "turn_metrics", self, metrics=self._turn_metrics
+                    )
+                except Exception:
+                    pass
+                turn_journal.append(self._journal_ctx(), "turn_end", status=_turn_status)
+                turn_journal.compact(self._journal_ctx())
+                self._turn_metrics.end(_turn_status)
 
     @extension.extensible
     async def prepare_prompt(self, loop_data: LoopData) -> list[BaseMessage]:
         self.context.log.set_progress("Building prompt")
+        import os as _os
+        _timing = _os.environ.get("A0_PROMPT_TIMING") == "1"
+        _t0 = time.perf_counter()
+        def _pt(stage):
+            if not _timing:
+                return
+            try:
+                with open(__import__("tempfile").gettempdir() + "/a0-prompt-timing.log", "a") as fh:
+                    fh.write(f"{time.time():.3f} it={loop_data.iteration} {stage} +{time.perf_counter()-_t0:.3f}s\n")
+            except Exception:
+                pass
 
         # call extensions before setting prompts
         await extension.call_extensions_async(
             "message_loop_prompts_before", self, loop_data=loop_data
         )
+        _pt("prompts_before done")
 
         # set system prompt and message history
         responses_history.start_prompt(loop_data)
-        loop_data.system = await self.get_system_prompt(self.loop_data)
+        cached_system = getattr(self, "_system_prompt_cache", None)
+        if cached_system is None:
+            cached_system = await self.get_system_prompt(self.loop_data)
+            self._system_prompt_cache = list(cached_system)
+        loop_data.system = list(cached_system)
         loop_data.history_output = self.history.output()
+        _pt("system+history done")
 
         # and allow extensions to edit them
         await extension.call_extensions_async(
             "message_loop_prompts_after", self, loop_data=loop_data
         )
+        _pt("prompts_after done")
 
         # concatenate system prompt and remove JSON fence markers from examples
         system_text = files.remove_code_fences(
@@ -617,6 +737,7 @@ class Agent:
         responses_history.remember_prompt(loop_data, full_text, full_prompt[0], protocol)
 
         # store as last context window content
+        _pt("render done")
         self.set_data(
             Agent.DATA_NAME_CTX_WINDOW,
             {
@@ -940,7 +1061,97 @@ class Agent:
         background: bool = False,
         explicit_caching: bool = True,
     ) -> LLMResult:
-        model = self.get_chat_model()
+        metrics = getattr(self, "_turn_metrics", None)
+        started = time.perf_counter()
+        turn_journal.append(self._journal_ctx(), "model_start")
+
+        from plugins._model_config.helpers import model_config as _mc
+
+        fallbacks = _mc.get_chat_fallback_configs(self)
+        got_chunk = False
+
+        async def _resp_wrapped(*args):
+            nonlocal got_chunk
+            got_chunk = True
+            if response_callback:
+                return await response_callback(*args)
+            return None
+
+        async def _reason_wrapped(*args):
+            nonlocal got_chunk
+            got_chunk = True
+            if reasoning_callback:
+                await reasoning_callback(*args)
+
+        candidates: list[object | None] = [None]
+        for cfg in fallbacks:
+            try:
+                candidates.append(_mc.build_chat_model_from_config(cfg))
+            except Exception:
+                continue
+
+        for index, candidate in enumerate(candidates):
+            try:
+                result = await self._call_chat_model_turn(
+                    messages,
+                    response_callback=_resp_wrapped if response_callback else None,
+                    reasoning_callback=_reason_wrapped if reasoning_callback else None,
+                    background=background,
+                    explicit_caching=explicit_caching,
+                    model_override=candidate,
+                )
+            except Exception as exc:
+                can_retry = (
+                    not got_chunk
+                    and index + 1 < len(candidates)
+                    and _is_fallback_error(exc)
+                )
+                if not can_retry:
+                    turn_journal.append(
+                        self._journal_ctx(),
+                        "model_end",
+                        error=True,
+                        duration_s=round(time.perf_counter() - started, 4),
+                    )
+                    if metrics:
+                        metrics.api(
+                            time.perf_counter() - started,
+                            error=True,
+                            iteration=getattr(getattr(self, "loop_data", None), "iteration", None),
+                        )
+                    raise
+                turn_journal.append(
+                    self._journal_ctx(),
+                    "model_fallback",
+                    index=index + 1,
+                    error=type(exc).__name__,
+                )
+                continue
+
+            turn_journal.append(
+                self._journal_ctx(),
+                "model_end",
+                duration_s=round(time.perf_counter() - started, 4),
+            )
+            if metrics:
+                metrics.api(
+                    time.perf_counter() - started,
+                    iteration=getattr(getattr(self, "loop_data", None), "iteration", None),
+                )
+            return result
+
+        raise RuntimeError("no model candidate produced a response")
+
+    async def _call_chat_model_turn(
+        self,
+        messages: list[BaseMessage],
+        response_callback: Callable[[str, str], Awaitable[str | None]] | None = None,
+        reasoning_callback: Callable[[str, str], Awaitable[None]] | None = None,
+        background: bool = False,
+        explicit_caching: bool = True,
+        model_override: object | None = None,
+    ) -> LLMResult:
+        model = model_override or self.get_chat_model()
         model_kwargs = getattr(model, "kwargs", {}) if model else {}
         if isinstance(model_kwargs, dict) and model_kwargs.get("responses_delete_on_chat_delete") is False:
             self.set_data("responses_delete_on_chat_delete", False)
@@ -1121,6 +1332,11 @@ class Agent:
     async def process_llm_result_tools(self, llm_result: LLMResult):
         await self._log_response_builtin_items(llm_result)
         if llm_result.function_calls:
+            import os as _os
+
+            from helpers import tool_runtime
+
+            calls = []
             for function_call in llm_result.function_calls:
                 name_map = self.get_data(Agent.DATA_NAME_RESPONSES_TOOL_NAME_MAP)
                 tool_name = original_tool_name(function_call.name, name_map)
@@ -1128,12 +1344,61 @@ class Agent:
                     call.call_id,
                     response.message,
                 )
+                calls.append(
+                    {
+                        "tool_name": tool_name,
+                        "tool_args": function_call.arguments,
+                        "message": llm_result.response,
+                        "raw_tool_name": tool_name,
+                        "responses_item_factory": response_item_factory,
+                    }
+                )
+
+            parallel_env = _os.environ.get("A0_PARALLEL_TOOLS")
+            if parallel_env is not None:
+                parallel_enabled = parallel_env != "0"
+            else:
+                from helpers import settings as _settings
+
+                parallel_enabled = bool(
+                    _settings.get_settings().get("agent_parallel_tools", True)
+                )
+            resolved: list[Any] | None = None
+            sequential_tools = {
+                item.strip()
+                for item in _os.environ.get(
+                    "A0_SEQUENTIAL_TOOLS", "response,scheduler,code_execution_tool"
+                ).split(",")
+                if item.strip()
+            }
+            if parallel_enabled and len(calls) > 1 and not any(
+                call["tool_name"] in sequential_tools for call in calls
+            ):
+                resolved = [
+                    self._resolve_tool_for_call(
+                        call["tool_name"], call["tool_args"], call["message"]
+                    )
+                    for call in calls
+                ]
+                if all(
+                    tool is not None
+                    and tool_runtime.can_run_concurrently(
+                        tool, **call["tool_args"]
+                    )
+                    for call, tool in zip(calls, resolved)
+                ):
+                    return await self._execute_tool_request_batch(
+                        calls, prepared_tools=resolved
+                    )
+
+            for index, call in enumerate(calls):
                 result = await self._execute_tool_request(
-                    tool_name=tool_name,
-                    tool_args=function_call.arguments,
-                    message=llm_result.response,
-                    raw_tool_name=tool_name,
-                    responses_item_factory=response_item_factory,
+                    **call,
+                    prepared_tool=(
+                        resolved[index]
+                        if resolved is not None and index < len(resolved)
+                        else None
+                    ),
                 )
                 if result:
                     return result
@@ -1161,6 +1426,29 @@ class Agent:
             )
         return await self.process_tools(message)
 
+    def _begin_tool_span(self, tool_name: str):
+        metrics = getattr(self, "_turn_metrics", None)
+        started = time.perf_counter()
+        turn_journal.append(self._journal_ctx(), "tool_start", tool=tool_name)
+        return started, metrics
+
+    def _end_tool_span(self, tool_name: str, started: float, metrics, *, error: bool = False):
+        duration = round(time.perf_counter() - started, 4)
+        turn_journal.append(
+            self._journal_ctx(),
+            "tool_end",
+            tool=tool_name,
+            error=error,
+            duration_s=duration,
+        )
+        if metrics:
+            metrics.tool(
+                tool_name,
+                duration,
+                error=error,
+                iteration=getattr(getattr(self, "loop_data", None), "iteration", None),
+            )
+
     async def _execute_tool_request(
         self,
         tool_name: str,
@@ -1168,19 +1456,36 @@ class Agent:
         message: str,
         raw_tool_name: str = "",
         responses_item_factory: Callable[[Any], dict[str, Any]] | None = None,
+        prepared_tool: Any = None,
     ):
-        raw_tool_name = raw_tool_name or tool_name
+        started, metrics = self._begin_tool_span(tool_name)
+        try:
+            result = await self._execute_tool_request_impl(
+                tool_name=tool_name,
+                tool_args=tool_args,
+                message=message,
+                raw_tool_name=raw_tool_name,
+                responses_item_factory=responses_item_factory,
+                prepared_tool=prepared_tool,
+            )
+        except Exception:
+            self._end_tool_span(tool_name, started, metrics, error=True)
+            raise
+        self._end_tool_span(tool_name, started, metrics)
+        return result
+
+    def _resolve_tool_for_call(
+        self,
+        tool_name: str,
+        tool_args: dict,
+        message: str,
+    ):
         tool_method = None
         tool = None
-
         try:
             import helpers.mcp_handler as mcp_helper
 
-            mcp_tool_candidate = mcp_helper.MCPConfig.get_instance().get_tool(
-                self, tool_name
-            )
-            if mcp_tool_candidate:
-                tool = mcp_tool_candidate
+            tool = mcp_helper.MCPConfig.get_instance().get_tool(self, tool_name)
         except ImportError:
             PrintStyle(
                 background_color="black", font_color="yellow", padding=True
@@ -1189,7 +1494,6 @@ class Agent:
             PrintStyle(background_color="black", font_color="red", padding=True).print(
                 f"Failed to get MCP tool '{tool_name}': {e}"
             )
-
         if not tool:
             tool = self.get_tool(
                 name=tool_name,
@@ -1198,7 +1502,57 @@ class Agent:
                 message=message,
                 loop_data=self.loop_data,
             )
+        return tool
 
+    async def _run_tool_before(self, tool, tool_name: str, tool_args: dict) -> None:
+        self.loop_data.current_tool = tool  # type: ignore
+        await self.handle_intervention()
+        await tool.before_execution(**tool_args)
+        await self.handle_intervention()
+        await extension.call_extensions_async(
+            "tool_execute_before",
+            self,
+            tool_args=tool_args or {},
+            tool_name=tool_name,
+        )
+
+    async def _run_tool_after(
+        self,
+        tool,
+        tool_name: str,
+        response,
+        responses_item_factory: Callable[[Any], dict[str, Any]] | None = None,
+    ) -> None:
+        self.loop_data.current_tool = tool  # type: ignore
+        try:
+            await self.handle_intervention()
+            await extension.call_extensions_async(
+                "tool_execute_after",
+                self,
+                response=response,
+                tool_name=tool_name,
+            )
+            if responses_item_factory:
+                response.additional = {
+                    **(response.additional or {}),
+                    "_responses_output_item": responses_item_factory(response),
+                }
+            await tool.after_execution(response)
+            await self.handle_intervention()
+        finally:
+            self.loop_data.current_tool = None
+
+    async def _execute_tool_request_impl(
+        self,
+        tool_name: str,
+        tool_args: dict,
+        message: str,
+        raw_tool_name: str = "",
+        responses_item_factory: Callable[[Any], dict[str, Any]] | None = None,
+        prepared_tool: Any = None,
+    ):
+        raw_tool_name = raw_tool_name or tool_name
+        tool = prepared_tool or self._resolve_tool_for_call(tool_name, tool_args, message)
         if not tool:
             error_detail = (
                 f"Tool '{raw_tool_name}' not found or could not be initialized."
@@ -1212,44 +1566,135 @@ class Agent:
             )
             return None
 
-        self.loop_data.current_tool = tool  # type: ignore
         try:
-            await self.handle_intervention()
-
-            await tool.before_execution(**tool_args)
-            await self.handle_intervention()
-
-            await extension.call_extensions_async(
-                "tool_execute_before",
-                self,
-                tool_args=tool_args or {},
-                tool_name=tool_name,
-            )
-
+            await self._run_tool_before(tool, tool_name, tool_args)
             response = await tool.execute(**tool_args)
-            await self.handle_intervention()
-
-            await extension.call_extensions_async(
-                "tool_execute_after",
-                self,
-                response=response,
-                tool_name=tool_name,
-            )
-
-            if responses_item_factory:
-                response.additional = {
-                    **(response.additional or {}),
-                    "_responses_output_item": responses_item_factory(response),
-                }
-
-            await tool.after_execution(response)
-            await self.handle_intervention()
-
-            if response.break_loop:
-                self._clear_responses_pending_state()
-                return response.message
+            await self._run_tool_after(tool, tool_name, response, responses_item_factory)
         finally:
             self.loop_data.current_tool = None
+        if response.break_loop:
+            self._clear_responses_pending_state()
+            return response.message
+        return None
+
+    async def _execute_tool_request_batch(
+        self,
+        calls: list[dict[str, Any]],
+        *,
+        prepared_tools: list[Any] | None = None,
+    ):
+        """Run native function calls concurrently, commit results in model order."""
+        tools = prepared_tools or [
+            self._resolve_tool_for_call(
+                call["tool_name"], call["tool_args"], call["message"]
+            )
+            for call in calls
+        ]
+        if any(tool is None for tool in tools):
+            # Preserve the sequential warning/unknown-tool behavior.
+            for fallback in calls:
+                result = await self._execute_tool_request(**fallback)
+                if result:
+                    return result
+            return None
+        prepared = list(zip(calls, tools))
+
+        for call, tool in prepared:
+            try:
+                await self._run_tool_before(tool, call["tool_name"], call["tool_args"])
+            finally:
+                self.loop_data.current_tool = None
+
+        try:
+            from helpers import settings as _settings
+
+            limit = int(
+                __import__("os").environ.get("A0_MAX_PARALLEL_TOOLS")
+                or _settings.get_settings().get("agent_max_parallel_tools", 0)
+                or 0
+            )
+        except Exception:
+            limit = 0
+        semaphore = asyncio.Semaphore(limit) if limit > 0 else None
+
+        async def run(call: dict[str, Any], tool):
+            started, metrics = self._begin_tool_span(call["tool_name"])
+            self.loop_data.current_tool = tool  # task-local ContextVar
+            try:
+                if semaphore is None:
+                    response = await tool.execute(**call["tool_args"])
+                else:
+                    async with semaphore:
+                        response = await tool.execute(**call["tool_args"])
+            except asyncio.CancelledError:
+                self._end_tool_span(call["tool_name"], started, metrics, error=True)
+                raise
+            except Exception:
+                self._end_tool_span(call["tool_name"], started, metrics, error=True)
+                raise
+            finally:
+                self.loop_data.current_tool = None
+            self._end_tool_span(call["tool_name"], started, metrics)
+            return response
+
+        tasks = [
+            asyncio.create_task(run(call, tool)) for call, tool in prepared
+        ]
+        done, pending = await asyncio.wait(
+            tasks, return_when=asyncio.FIRST_EXCEPTION
+        )
+        intervention = next(
+            (
+                task.exception()
+                for task in done
+                if not task.cancelled()
+                and isinstance(task.exception(), InterventionException)
+            ),
+            None,
+        )
+        if intervention is not None:
+            for task in pending:
+                task.cancel()
+            await asyncio.gather(*pending, return_exceptions=True)
+            self.loop_data.current_tool = None
+            raise intervention
+
+        results = await asyncio.gather(*tasks, return_exceptions=True)
+
+        late_intervention = next(
+            (
+                result
+                for result in results
+                if isinstance(result, InterventionException)
+            ),
+            None,
+        )
+        if late_intervention is not None:
+            self.loop_data.current_tool = None
+            raise late_intervention
+
+        first_error: BaseException | None = None
+        final: str | None = None
+        for (call, tool), response in zip(prepared, results):
+            if isinstance(response, BaseException):
+                if first_error is None:
+                    first_error = response
+                continue
+            await self._run_tool_after(
+                tool,
+                call["tool_name"],
+                response,
+                call.get("responses_item_factory"),
+            )
+            if response.break_loop:
+                self._clear_responses_pending_state()
+                if final is None:
+                    final = response.message
+
+        if final is not None:
+            return final
+        if first_error is not None:
+            raise first_error
         return None
 
     async def _log_response_builtin_items(self, llm_result: LLMResult) -> None:

@@ -49,8 +49,52 @@ def initialize_agent(override_settings: dict | None = None):
 @extension.extensible
 def initialize_chats():
     from helpers import persist_chat
+
     async def initialize_chats_async():
-        persist_chat.load_tmp_chats()
+        import os
+        import time
+
+        started = time.perf_counter()
+        if os.environ.get("A0_LAZY_CHATS", "0") == "1":
+            index = persist_chat.refresh_chat_index() or {}
+            count = len(index.get("entries") or {})
+            elapsed = time.perf_counter() - started
+            PrintStyle().print(
+                f"Indexed {count} saved chats in {elapsed:.2f}s (lazy hydration)"
+            )
+            # Scheduler tasks need their contexts in memory so state snapshots
+            # can classify them as tasks (not ordinary chats).
+            try:
+                from helpers.task_scheduler import TaskScheduler
+
+                for task in TaskScheduler.get().get_tasks():
+                    ctxid = getattr(task, "context_id", "") or ""
+                    if ctxid and persist_chat.chat_file_exists(ctxid):
+                        persist_chat.load_chat(ctxid)
+            except Exception:
+                pass
+            if os.environ.get("A0_CHAT_GUARD", "0") == "1":
+                warn_count = int(os.environ.get("A0_CHAT_WARN_COUNT", "100"))
+                warn_seconds = float(os.environ.get("A0_CHAT_WARN_SECONDS", "2.0"))
+                if count > warn_count or elapsed > warn_seconds:
+                    PrintStyle.warning(
+                        f"Chat index is growing ({count} chats, {elapsed:.2f}s). "
+                        "Archive old chats if sidebar/startup latency increases."
+                    )
+            return
+
+        ids = persist_chat.load_tmp_chats() or []
+        elapsed = time.perf_counter() - started
+        PrintStyle().print(f"Loaded {len(ids)} saved chats in {elapsed:.2f}s")
+        if os.environ.get("A0_CHAT_GUARD", "0") == "1":
+            warn_count = int(os.environ.get("A0_CHAT_WARN_COUNT", "100"))
+            warn_seconds = float(os.environ.get("A0_CHAT_WARN_SECONDS", "2.0"))
+            if len(ids) > warn_count or elapsed > warn_seconds:
+                PrintStyle.warning(
+                    f"Chat hydration is growing ({len(ids)} chats, {elapsed:.2f}s). "
+                    "Archive old chats or enable A0_LAZY_CHATS=1."
+                )
+
     return defer.DeferredTask().start_task(initialize_chats_async)
 
 @extension.extensible

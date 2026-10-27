@@ -13,6 +13,7 @@ $env:PLAYWRIGHT_BROWSERS_PATH = if ($env:PLAYWRIGHT_BROWSERS_PATH) { $env:PLAYWR
 # Fast start: never block HTTP on the embedding warm-up. Warm it in the background
 # so the first chat turn does not pay ~7s loading the model (A0_PRELOAD=0 keeps it
 # lazy and saves ~1.7GB RSS while unused).
+$env:A0_LAZY_WEBUI = if ($env:A0_LAZY_WEBUI) { $env:A0_LAZY_WEBUI } else { "1" }
 $env:A0_PRELOAD_WAIT = if ($env:A0_PRELOAD_WAIT) { $env:A0_PRELOAD_WAIT } else { "0" }
 $env:A0_PRELOAD = if ($env:A0_PRELOAD) { $env:A0_PRELOAD } else { "1" }
 # Local embeddings through onnxruntime instead of torch (-~400 MB RSS, ~-9 s load).

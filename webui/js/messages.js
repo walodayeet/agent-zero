@@ -1560,7 +1560,14 @@ function renderProcessStepDetail({
       "process-step-detail-content",
       ...(contentClasses || []),
     );
-    stepDetailContent.innerHTML = adjustStepContent(content);
+    const applyStepContent = () => {
+      stepDetailContent.innerHTML = adjustStepContent(content);
+    };
+    if (hasSelectionInside(stepDetailContent)) {
+      queueContentRender(stepDetailContent, applyStepContent);
+    } else {
+      applyStepContent();
+    }
   } else {
     stepDetailScroll
       .querySelector(":scope > .process-step-detail-content")
@@ -1822,11 +1829,14 @@ function renderStandaloneMessageContent({
     processedContent = convertPathsToLinks(processedContent);
     processedContent = addBlankTargetsToLinks(processedContent);
 
-    if (smoothStream) smoothRender(contentDiv, processedContent);
-    else contentDiv.innerHTML = processedContent;
-
-    if (latex) renderLatexElements(contentDiv);
-    adjustMarkdownRender(contentDiv);
+    const applyMarkdown = () => {
+      if (smoothStream) smoothRender(contentDiv, processedContent);
+      else contentDiv.innerHTML = processedContent;
+      if (latex) renderLatexElements(contentDiv);
+      adjustMarkdownRender(contentDiv);
+    };
+    if (hasSelectionInside(contentDiv)) queueContentRender(contentDiv, applyMarkdown);
+    else applyMarkdown();
     return;
   }
 
@@ -1840,8 +1850,12 @@ function renderStandaloneMessageContent({
   }
   preElement.className = `msg-content ${contentClasses.join(" ")}`;
 
-  if (smoothStream) smoothRender(preElement, convertHTML(content));
-  else preElement.innerHTML = convertHTML(content);
+  const applyPre = () => {
+    if (smoothStream) smoothRender(preElement, convertHTML(content));
+    else preElement.innerHTML = convertHTML(content);
+  };
+  if (hasSelectionInside(preElement)) queueContentRender(preElement, applyPre);
+  else applyPre();
 }
 
 function estimateKvpTextSize(kvps) {
@@ -3506,6 +3520,45 @@ function isMassRender() {
 }
 
 // smooth fade in animation for new chunks when streaming
+// Streaming updates replace DOM nodes, which kills an active text selection.
+// Defer those updates until the user's selection is released.
+const _pendingContentRenders = new Map();
+let _selectionWatcherBound = false;
+
+function hasSelectionInside(element) {
+  const selection = document.getSelection?.();
+  if (!selection || selection.isCollapsed || selection.rangeCount === 0) return false;
+  const range = selection.getRangeAt(0);
+  return (
+    element.contains(range.startContainer) || element.contains(range.endContainer)
+  );
+}
+
+function flushPendingContentRenders() {
+  for (const [element, render] of [..._pendingContentRenders]) {
+    if (!element.isConnected) {
+      _pendingContentRenders.delete(element);
+      continue;
+    }
+    if (hasSelectionInside(element)) continue;
+    _pendingContentRenders.delete(element);
+    try {
+      render();
+    } catch (_e) {
+      /* ignore */
+    }
+  }
+}
+
+function queueContentRender(element, render) {
+  _pendingContentRenders.set(element, render);
+  if (_selectionWatcherBound) return;
+  _selectionWatcherBound = true;
+  document.addEventListener("selectionchange", flushPendingContentRenders, true);
+  document.addEventListener("pointerup", flushPendingContentRenders, true);
+  document.addEventListener("keyup", flushPendingContentRenders, true);
+}
+
 function smoothRender(element, newContent, delay = 350) {
   // skip on mass render
   if (isMassRender()) {

@@ -114,6 +114,8 @@ class StartupMonitor:
         @asynccontextmanager
         async def _lifespan(_app):
             self.mark("starlette.lifespan.startup")
+            if os.environ.get("A0_WARMUP_TURN", "0") == "1":
+                asyncio.create_task(_warmup_turn())
             try:
                 yield
             finally:
@@ -421,3 +423,27 @@ def _serve_uvicorn(server: uvicorn.Server) -> None:
     loop_factory = server.config.get_loop_factory()
     with asyncio.Runner(loop_factory=loop_factory) as runner:
         runner.run(server.serve())
+
+
+async def _warmup_turn() -> None:
+    """Optional: run one hidden background turn to warm provider/prompt caches."""
+    try:
+        from agent import AgentContext, AgentContextType, UserMessage
+        from initialize import initialize_agent
+
+        context = AgentContext(
+            config=initialize_agent(), type=AgentContextType.BACKGROUND
+        )
+        try:
+            task = context.communicate(UserMessage(message="Reply with exactly OK"))
+            await task.result()
+        finally:
+            AgentContext.remove(context.id)
+            try:
+                from helpers import persist_chat
+
+                persist_chat.remove_chat(context.id)
+            except Exception:
+                pass
+    except Exception:
+        pass

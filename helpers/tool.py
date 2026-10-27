@@ -15,6 +15,13 @@ class Response:
     additional: dict[str, Any] | None = None
 
 class Tool:
+    # Subclasses may opt in only when execution is independent, stateless, and
+    # does not mutate Agent/history/intervention state.
+    concurrency_safe = False
+
+    def concurrency_safe_for(self, **_args) -> bool:
+        """Opt in only when this invocation is independent and side-effect-free."""
+        return bool(self.concurrency_safe)
 
     def __init__(self, agent: Agent, name: str, method: str | None, args: dict[str,str], message: str, loop_data: LoopData | None, **kwargs) -> None:
         self.agent = agent

@@ -167,3 +167,10 @@ def test_plugin_settings_reset_is_explicit_and_does_not_capture_toast_early() ->
     assert "Reset to default" in settings_modal
     assert "const justToast = globalThis.justToast" not in settings_store
     assert 'globalThis.justToast?.("Settings reset to default.", "info")' in settings_store
+
+
+def test_preset_store_preserves_additive_fields() -> None:
+    store = read("plugins", "_model_config", "webui", "model-config-store.js")
+    assert "for (const key of ['fallback', 'roles'])" in store
+    assert "...presetAdditiveFields(p)," in store
+    assert "{ name: p.name, ...presetAdditiveFields(p) }" in store

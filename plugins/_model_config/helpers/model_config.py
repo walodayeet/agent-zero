@@ -277,6 +277,10 @@ def _clean_preset_for_file(preset: dict) -> dict:
     cleaned = {
         "name": name,
     }
+    for extra in ("fallback", "roles"):
+        value = preset.get(extra)
+        if isinstance(value, (list, dict)):
+            cleaned[extra] = deepcopy(value)
     has_named_slots = any(
         isinstance(preset.get(slot), dict) for slot in PRESET_SLOT_CONFIG_SECTIONS
     )
@@ -534,6 +538,9 @@ def update_preset_from_config(name: str, config: dict) -> dict:
         raise ValueError(f"Preset '{name}' was not found.")
     canonical_name = str(target.get("name") or DEFAULT_PRESET_NAME)
     replacement = config_to_preset(config, canonical_name)
+    for extra in ("fallback", "roles"):
+        if extra in target:
+            replacement[extra] = deepcopy(target[extra])
     if canonical_name == DEFAULT_PRESET_NAME:
         for slot in PRESET_SLOT_CONFIG_SECTIONS:
             if not _slot_has_identity(replacement.get(slot) or {}):
@@ -796,13 +803,38 @@ def get_effective_config(agent=None) -> dict:
     return config
 
 
+def _role_override(agent=None, role: str = "chat", slot: str = "chat") -> dict:
+    """Return an explicitly configured role model, never a legacy default."""
+    try:
+        preset = resolve_preset(get_effective_preset_name(agent)) or {}
+        roles = preset.get("roles")
+        value = roles.get(role) if isinstance(roles, dict) else None
+        if isinstance(value, dict):
+            return deepcopy(value)
+        if isinstance(value, str) and value.strip():
+            named = resolve_preset(value.strip())
+            if isinstance(named, dict):
+                selected = named.get(slot) or named.get("chat")
+                if isinstance(selected, dict):
+                    return deepcopy(selected)
+    except Exception:
+        pass
+    return {}
+
+
 def get_chat_model_config(agent=None) -> dict:
-    """Get chat model config, with per-chat override if active."""
+    """Get chat model config, with optional role and per-chat override."""
+    role = _role_override(agent, "chat", "chat")
+    if role:
+        return role
     return get_effective_config(agent).get("chat_model", {})
 
 
 def get_vision_model_config(agent=None) -> dict:
-    """Get the active Vision Model config after applying Main-first routing."""
+    """Get the optional vision role/config after applying Main-first routing."""
+    role = _role_override(agent, "vision", "vision")
+    if role:
+        return role
     cfg = get_effective_config(agent)
     vision_cfg = cfg.get("vision_model", {})
     if not all(
@@ -818,7 +850,10 @@ def get_vision_model_config(agent=None) -> dict:
 
 
 def get_utility_model_config(agent=None) -> dict:
-    """Get utility model config, with per-chat override if active."""
+    """Get utility model config, with optional role and per-chat override."""
+    role = _role_override(agent, "utility", "utility")
+    if role:
+        return role
     return get_effective_config(agent).get("utility_model", {})
 
 
@@ -896,13 +931,38 @@ def build_model_config(cfg: dict, model_type: models.ModelType) -> models.ModelC
     )
 
 
-def build_chat_model(agent=None):
-    """Build and return a LiteLLMChatWrapper from config."""
-    cfg = get_chat_model_config(agent)
+def build_chat_model_from_config(cfg: dict):
+    """Build a chat model from a preset/config section (internal helper)."""
     mc = build_model_config(cfg, models.ModelType.CHAT)
     return models.get_chat_model(
         mc.provider, mc.name, model_config=mc, **mc.build_kwargs()
     )
+
+
+def get_role_config(agent=None, role: str = "chat") -> dict:
+    """Resolve an optional role mapping, falling back to its normal slot."""
+    slot = role if role in {"chat", "vision", "utility", "embedding"} else "chat"
+    override = _role_override(agent, role, slot)
+    if override:
+        return override
+    cfg = get_effective_config(agent)
+    return cfg.get(PRESET_SLOT_CONFIG_SECTIONS.get(slot, "chat_model"), {})
+
+
+def get_chat_fallback_configs(agent=None) -> list[dict]:
+    """Return the additive `fallback` list from the active preset."""
+    try:
+        preset = resolve_preset(get_effective_preset_name(agent))
+        fallback = preset.get("fallback") if isinstance(preset, dict) else None
+        return [dict(item) for item in fallback if isinstance(item, dict)] if isinstance(fallback, list) else []
+    except Exception:
+        return []
+
+
+def build_chat_model(agent=None):
+    """Build and return a LiteLLMChatWrapper from config."""
+    cfg = get_chat_model_config(agent)
+    return build_chat_model_from_config(cfg)
 
 
 def build_utility_model(agent=None):
