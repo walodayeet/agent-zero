@@ -60,6 +60,11 @@ class Settings(TypedDict):
     agent_profile: str
     agent_knowledge_subdir: str
     max_consecutive_unusable_responses: int
+    agent_max_turns: int
+    agent_turn_timeout_seconds: int
+    agent_parallel_tools: bool
+    agent_max_parallel_tools: int
+    turn_journal_resume: str
     timezone: str
     time_format: str
     ui_control_visibility: dict[str, dict[str, bool]]
@@ -607,6 +612,11 @@ def _build_default_settings(version: str | None = None) -> Settings:
         max_consecutive_unusable_responses=get_default_value(
             "max_consecutive_unusable_responses", 5
         ),
+        agent_max_turns=get_default_value("agent_max_turns", 0),
+        agent_turn_timeout_seconds=get_default_value("agent_turn_timeout_seconds", 0),
+        agent_parallel_tools=get_default_value("agent_parallel_tools", True),
+        agent_max_parallel_tools=get_default_value("agent_max_parallel_tools", 0),
+        turn_journal_resume=get_default_value("turn_journal_resume", "report"),
         timezone=_normalize_timezone_setting(get_default_value("timezone", TIMEZONE_AUTO)),
         time_format=_normalize_time_format(get_default_value("time_format", TIME_FORMAT_12H)),
         ui_control_visibility=_normalize_ui_control_visibility(

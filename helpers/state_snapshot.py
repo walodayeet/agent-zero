@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import os
 import types
 from typing import Any, Mapping, TypedDict, Union, get_args, get_origin, get_type_hints
 
@@ -285,6 +287,11 @@ async def build_snapshot_from_request(
         _prune_missing_saved_contexts()
 
     active_context = AgentContext.get(ctxid) if ctxid else None
+    if ctxid and active_context is None:
+        # Lazy chats: hydrate only the selected chat, not the whole history.
+        from helpers import persist_chat
+
+        active_context = await asyncio.to_thread(persist_chat.load_chat, ctxid)
 
     if active_context:
         log_output = active_context.log.output(start=from_no)
@@ -351,6 +358,17 @@ async def build_snapshot_from_request(
             tasks.append(context_data)
 
         processed_contexts.add(ctx.id)
+
+    if include_collections and os.environ.get("A0_LAZY_CHATS", "0") == "1":
+        # Saved chats that are not hydrated yet still belong in the sidebar.
+        from helpers import persist_chat
+
+        for row in persist_chat.indexed_chat_outputs():
+            row_id = str(row.get("id") or "")
+            if not row_id or row_id in processed_contexts:
+                continue
+            processed_contexts.add(row_id)
+            ctxs.append(row)
 
     ctxs.sort(key=lambda x: x["created_at"], reverse=True)
     tasks.sort(key=lambda x: x["created_at"], reverse=True)

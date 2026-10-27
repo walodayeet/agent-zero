@@ -852,6 +852,10 @@ class TaskScheduler:
 
     async def _get_chat_context(self, task: Union[ScheduledTask, AdHocTask, PlannedTask]) -> AgentContext:
         context = AgentContext.get(task.context_id) if task.context_id else None
+        if not context and task.context_id:
+            from helpers import persist_chat
+
+            context = persist_chat.load_chat(task.context_id)
 
         if context:
             assert isinstance(context, AgentContext)

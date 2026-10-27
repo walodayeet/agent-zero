@@ -3,6 +3,7 @@ from __future__ import annotations
 import hashlib
 from html.parser import HTMLParser
 import json
+import os
 from pathlib import Path
 import re
 from typing import TYPE_CHECKING, Iterable
@@ -17,6 +18,7 @@ if TYPE_CHECKING:
 _CACHE_AREA = "ui_asset_bundle(extensions)(plugins)"
 _CACHE_KEY_PREFIX = "webui"
 _LOCAL_ORIGIN = "https://agent-zero.local"
+_DISK_CACHE_NAME = ".a0_ui_bundle.json"
 _BUNDLE_POLICY_VERSION = "text-startup-v4-512k"
 _BUNDLE_SUFFIXES = {".css", ".htm", ".html", ".js", ".mjs", ".xhtml"}
 _WEBUI_EXTENSION_ENTRY_SUFFIXES = {".htm", ".html", ".js", ".mjs", ".xhtml"}
@@ -90,6 +92,32 @@ class _AssetRoot:
         )
 
 
+def _disk_cache_path():
+    return files.get_abs_path("usr", _DISK_CACHE_NAME)
+
+
+def _load_disk_bundle(signature: str) -> dict | None:
+    try:
+        data = json.loads(files.read_file(_disk_cache_path()))
+        if data.get("signature") == signature and isinstance(data.get("bundle"), dict):
+            return data["bundle"]
+    except Exception:
+        pass
+    return None
+
+
+def _save_disk_bundle(signature: str, bundle: dict) -> None:
+    try:
+        path = _disk_cache_path()
+        tmp = path + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as handle:
+            json.dump({"signature": signature, "bundle": bundle}, handle)
+        import os
+        os.replace(tmp, path)
+    except Exception:
+        pass
+
+
 def get_ui_asset_bundle(
     entry_urls: Iterable[str],
     agent: "Agent | None" = None,
@@ -104,14 +132,18 @@ def get_ui_asset_bundle(
     # scan discover their component, stylesheet, and module dependencies.
     # Unrelated files stay lazy and use the service worker's ordinary
     # fetch-and-cache fallback.
-    for root in extension_roots:
-        for path in _iter_root_files(
-            root.path,
-            suffixes=_WEBUI_EXTENSION_ENTRY_SUFFIXES,
-        ):
-            url = _url_for_path(path, roots)
-            if url:
-                entries.append(url)
+    # A0_LAZY_WEBUI=1 keeps plugin/webui extensions out of the startup bundle.
+    # Their component files remain fetchable via the normal static routes and
+    # the service worker caches them on first use.
+    if os.environ.get("A0_LAZY_WEBUI", "0") != "1":
+        for root in extension_roots:
+            for path in _iter_root_files(
+                root.path,
+                suffixes=_WEBUI_EXTENSION_ENTRY_SUFFIXES,
+            ):
+                url = _url_for_path(path, roots)
+                if url:
+                    entries.append(url)
 
     signature = _bundle_signature(roots, entries)
     # Include the file signature in the cache key: keying on entry URLs alone served
@@ -121,12 +153,22 @@ def get_ui_asset_bundle(
     if cached is not None:
         return cached["bundle"]
 
+    disk_cached = _load_disk_bundle(signature)
+    if disk_cached is not None:
+        cache.add(
+            _CACHE_AREA,
+            cache_key,
+            {"signature": signature, "bundle": disk_cached},
+        )
+        return disk_cached
+
     result = _build_asset_bundle(entries, roots, signature)
     cache.add(
         _CACHE_AREA,
         cache_key,
         {"signature": signature, "bundle": result},
     )
+    _save_disk_bundle(signature, result)
     return result
 
 

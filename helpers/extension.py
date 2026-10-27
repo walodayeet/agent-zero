@@ -1,3 +1,4 @@
+import asyncio
 from abc import abstractmethod
 from typing import Any, Awaitable, Type, cast
 from helpers import modules, files
@@ -236,10 +237,33 @@ async def call_extensions_async(
     classes = _get_extension_classes(extension_point, agent=agent, **kwargs)
 
     # execute unique extensions
+    import os as _os
+    _timing = _os.environ.get("A0_PROMPT_TIMING") == "1" and extension_point.startswith("message_loop_prompts")
+    try:
+        _timeout = float(_os.environ.get("A0_EXTENSION_TIMEOUT", "0") or 0)
+    except ValueError:
+        _timeout = 0.0
     for cls in classes:
+        _started = __import__("time").perf_counter()
         result = cls(agent=agent).execute(**kwargs)
         if isinstance(result, Awaitable):
-            await result
+            try:
+                if _timeout > 0:
+                    async with asyncio.timeout(_timeout):
+                        await result
+                else:
+                    await result
+            except TimeoutError:
+                PrintStyle.warning(
+                    f"Extension {cls.__module__}.{cls.__name__} at '{extension_point}' "
+                    f"exceeded {_timeout:.1f}s and was skipped."
+                )
+        if _timing:
+            try:
+                with open(__import__("tempfile").gettempdir() + "/a0-ext-timing.log", "a") as fh:
+                    fh.write(f"{__import__('time').time():.3f} {extension_point} {cls.__name__} {__import__('time').perf_counter()-_started:.3f}\n")
+            except Exception:
+                pass
 
 
 def call_extensions_sync(extension_point: str, agent: "Agent|None" = None, **kwargs):
@@ -377,6 +401,7 @@ def register_extensions_watchdogs():
     def extensions_changed(items: list[watchdog.WatchItem]):
         cache.clear(_EXTENSIONS_CACHE_AREA)
         cache.clear(_CLASSES_CACHE_AREA)
+        cache.clear(_WEBUI_MANIFEST_CACHE_AREA)
         PrintStyle.debug("Extensions watchdog triggered:", items)
 
     # extensions and usr/extensions

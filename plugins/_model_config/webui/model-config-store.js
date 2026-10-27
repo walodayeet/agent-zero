@@ -60,6 +60,14 @@ function clonePlain(value) {
   return JSON.parse(JSON.stringify(value));
 }
 
+function presetAdditiveFields(preset) {
+  const extras = {};
+  for (const key of ['fallback', 'roles']) {
+    if (preset && preset[key] !== undefined) extras[key] = clonePlain(preset[key]);
+  }
+  return extras;
+}
+
 function isBlankPresetValue(value) {
   if (value === undefined || value === null || value === '') return true;
   if (Array.isArray(value)) return value.length === 0;
@@ -263,6 +271,7 @@ export const store = createStore("modelConfig", {
       const vision = visionSlot(effective.vision_model);
       return {
         name: p.name || '',
+        ...presetAdditiveFields(p),
         chat: { ...slot(effective.chat_model), _kwargs_text: kwargsToText(effective.chat_model?.kwargs) },
         vision: { ...vision, _kwargs_text: kwargsToText(vision.kwargs) },
         utility: { ...slot(effective.utility_model), _kwargs_text: kwargsToText(effective.utility_model?.kwargs) },
@@ -477,7 +486,7 @@ export const store = createStore("modelConfig", {
     const previousNames = this.globalPresets.map(p => String(p.name || '')).filter(Boolean);
     // Strip UI-only and globally-managed fields before saving
     const clean = presets.map(p => {
-      const c = { name: p.name };
+      const c = { name: p.name, ...presetAdditiveFields(p) };
       const isDefault = p._originalName === DEFAULT_PRESET_NAME;
       for (const slot of ['chat', 'vision', 'utility']) {
         if (p[slot]) {

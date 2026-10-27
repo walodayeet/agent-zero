@@ -23,6 +23,7 @@ export A0_HOST="${A0_HOST:-127.0.0.1}"
 # Fast start: never block HTTP on the embedding warm-up, and skip the warm-up
 # itself unless A0_PRELOAD=1. The local embedding model then loads on first use
 # (~6s once per process, ~1.7GB RSS saved while it is unused).
+export A0_LAZY_WEBUI="${A0_LAZY_WEBUI:-1}"
 export A0_PRELOAD_WAIT="${A0_PRELOAD_WAIT:-0}"
 export A0_PRELOAD="${A0_PRELOAD:-0}"
 # Local embeddings through onnxruntime instead of torch (~-400 MB RSS, ~-9 s load;
@@ -101,24 +102,37 @@ fi
 
 # Login is disabled unless AUTH_LOGIN/AUTH_PASSWORD are set, so the browser origin
 # must be allowlisted or every API call answers 403 "Origin None not allowed".
-if [ -z "${ALLOWED_ORIGINS:-}" ]; then
-  origins="http://localhost:${A0_PORT},http://127.0.0.1:${A0_PORT}"
-  case "$A0_HOST" in
-    0.0.0.0|::|"[::]")
-      host_name="$(hostname -f 2>/dev/null || hostname)"
-      host_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
-      if [ -z "$host_ip" ] && command -v ipconfig >/dev/null 2>&1; then
-        host_ip="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
-      fi
-      [ -n "$host_name" ] && origins="$origins,http://${host_name}:${A0_PORT}"
-      [ -n "$host_ip" ] && origins="$origins,http://${host_ip}:${A0_PORT}"
-      ;;
-    *)
-      origins="$origins,http://${A0_HOST}:${A0_PORT}"
-      ;;
-  esac
-  export ALLOWED_ORIGINS="$origins"
+# Always derive origins for the current port and union any inherited value;
+# a stale ALLOWED_ORIGINS from a previous port must not brick the UI.
+origins="http://localhost:${A0_PORT},http://127.0.0.1:${A0_PORT}"
+case "$A0_HOST" in
+  0.0.0.0|::|"[::]")
+    host_name="$(hostname -f 2>/dev/null || hostname)"
+    host_ip="$(hostname -I 2>/dev/null | awk '{print $1}')"
+    if [ -z "$host_ip" ] && command -v ipconfig >/dev/null 2>&1; then
+      host_ip="$(ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true)"
+    fi
+    [ -n "$host_name" ] && origins="$origins,http://${host_name}:${A0_PORT}"
+    [ -n "$host_ip" ] && origins="$origins,http://${host_ip}:${A0_PORT}"
+    ;;
+  *)
+    origins="$origins,http://${A0_HOST}:${A0_PORT}"
+    ;;
+esac
+if [ -n "${ALLOWED_ORIGINS:-}" ]; then
+  origins="$ALLOWED_ORIGINS,$origins"
 fi
+dedup_origins=""
+IFS=',' read -r -a origin_parts <<< "$origins"
+for origin in "${origin_parts[@]}"; do
+  origin="$(printf '%s' "$origin" | sed 's/^[[:space:]]*//;s/[[:space:]]*$//')"
+  [ -n "$origin" ] || continue
+  case ",$dedup_origins," in
+    *",$origin,"*) ;;
+    *) dedup_origins="${dedup_origins:+$dedup_origins,}$origin" ;;
+  esac
+done
+export ALLOWED_ORIGINS="$dedup_origins"
 
 # Local gateways (cliproxyapi, SearXNG, Ollama, …) must bypass any proxy.
 loopback_no_proxy="localhost,127.0.0.1,::1,host.docker.internal"

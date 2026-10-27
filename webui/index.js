@@ -151,7 +151,10 @@ export async function sendMessage(options = {}) {
 
       // Render immediately; the backend log reuses messageId and merges into this row.
       const heading = hasAttachments ? "Uploading attachments..." : "";
-      await setMessages([{ id: messageId, type: "user", heading, content: message, kvps: {} }]);
+      // Do not await the optimistic render: it may wait on lazily loaded
+      // plugin components, delaying the actual POST and wedging the composer.
+      void setMessages([{ id: messageId, type: "user", heading, content: message, kvps: {} }])
+        .catch((e) => toastFetchError("Error rendering message", e));
 
       // Include attachments in the user message
       if (hasAttachments) {

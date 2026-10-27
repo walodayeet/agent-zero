@@ -134,6 +134,11 @@ Paste this file to the next agent maintaining this host/checkout.
   was reverted; prompts are never traded for tokens.
 - Performance work must stay architectural: terminal I/O, startup/restore,
   caching of computed artifacts, process model, event-loop blocking.
+- `_context_doctor` accepts a genuine plain-text model reply as a `response` tool
+  call instead of spending a second model call on a tool-call reminder. Default is
+  `plain_text_as_response: auto`: pre-tool narration ("let me check …") still
+  retries; `true` always accepts, `false` keeps the upstream retry. Prompts are
+  unchanged.
 
 ## File discovery (workdir/project tree in the prompt)
 - `_75_include_workdir_extras` runs project/workdir tree scans through `asyncio.to_thread`, so large directory walks no longer stall the chat event loop. The previous 0.25–0.6 s signature estimate is not a current measured value; signature cost scales with walked directory/file entries and has not been re-benchmarked on the merged Windows tree.
@@ -165,7 +170,10 @@ Paste this file to the next agent maintaining this host/checkout.
   completion. Agent Zero is timed over `api/message_async` (fresh context) to the
   turn's `response` log entry. Tasks run interleaved (A0 then Hermes per rep) so
   gateway drift hits both, five reps, one warm-up each.
-- Medians with the full prompt restored (2026-10-23, fresh context per turn):
+- 2026-10-23 linux-branch medians with `plain_text_as_response: auto`
+  (no second model call): PONG 1.38 s, terminal tool 2.92 s, explanation 1.60 s.
+  Detail and reproduction: `docs/performance-report.md`, `scripts/bench/bench.py`.
+- Earlier medians with the full prompt restored (2026-10-23, fresh context per turn):
   simple reply 3.56 s (2.65-7.35), terminal tool 4.66 s, three-sentence answer
   4.64 s. The compact-prompt figures (1.94 / 2.61 / 1.94 s) are void: they were
   bought by shrinking the system prompt, which is not allowed.
@@ -256,6 +264,9 @@ environmental (Docker socket, credentials, external services, root installers).
 - `runtime.normalize_local_url()` rewrites `localhost` → `127.0.0.1` for model
   `api_base` values in bare-metal mode (IPv4-only local gateways). Docker mode is
   unchanged. `run-baremetal.sh`/`.ps1` append loopback hosts to `NO_PROXY`.
+- Core `helpers/runtime.py` sets `KMP_DUPLICATE_LIB_OK=TRUE` at import and, for bare
+  metal, defaults `A0_EMBEDDING_BACKEND=onnx`/`A0_PRELOAD_WAIT=0`, so direct
+  `python run_ui.py`, systemd and harness launches match `run-baremetal.sh`.
 - Model search honors a custom `api_base` for providers whose metadata ships an
   absolute endpoint (e.g. OpenAI) and bypasses proxy env for loopback hosts.
 - `runtime.initialize()` appends loopback hosts to `NO_PROXY` on bare metal, so

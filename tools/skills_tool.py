@@ -24,6 +24,9 @@ class SkillsTool(Tool):
     Script execution is handled by code_execution_tool directly.
     """
 
+    def concurrency_safe_for(self, **kwargs) -> bool:
+        return self._current_action(**kwargs) in {"list", "search"}
+
     @staticmethod
     def _normalize_action(action: object) -> str:
         return (

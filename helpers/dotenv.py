@@ -11,14 +11,18 @@ KEY_RFC_PASSWORD = "RFC_PASSWORD"
 KEY_ROOT_PASSWORD = "ROOT_PASSWORD"
 
 def load_dotenv():
-    _load_dotenv(get_dotenv_file_path(), override=True)
+    # Process environment wins over usr/.env: the launcher (run-baremetal.*)
+    # derives values like ALLOWED_ORIGINS from the actual runtime, and a stale
+    # .env line must not silently clobber it. Values absent from the process
+    # environment are still loaded from the file.
+    _load_dotenv(get_dotenv_file_path(), override=False)
 
 
 def get_dotenv_file_path():
     return get_abs_path("usr/.env")
 
 def get_dotenv_value(key: str, default: Any = None):
-    # load_dotenv()       
+    # Reads os.environ only; the caller (an entrypoint) must have run load_dotenv().
     return os.getenv(key, default)
 
 def save_dotenv_value(key: str, value: str, reload_env: bool = True):
@@ -41,4 +45,6 @@ def save_dotenv_value(key: str, value: str, reload_env: bool = True):
         f.writelines(lines)
         f.truncate()
     if reload_env:
-        load_dotenv()
+        # Set only the saved key so the change is visible immediately without
+        # re-clobbering launcher-derived environment variables (see load_dotenv).
+        os.environ[key] = value

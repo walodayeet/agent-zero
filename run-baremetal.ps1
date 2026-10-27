@@ -13,6 +13,7 @@ $env:PLAYWRIGHT_BROWSERS_PATH = if ($env:PLAYWRIGHT_BROWSERS_PATH) { $env:PLAYWR
 # Fast start: never block HTTP on the embedding warm-up. Warm it in the background
 # so the first chat turn does not pay ~7s loading the model (A0_PRELOAD=0 keeps it
 # lazy and saves ~1.7GB RSS while unused).
+$env:A0_LAZY_WEBUI = if ($env:A0_LAZY_WEBUI) { $env:A0_LAZY_WEBUI } else { "1" }
 $env:A0_PRELOAD_WAIT = if ($env:A0_PRELOAD_WAIT) { $env:A0_PRELOAD_WAIT } else { "0" }
 $env:A0_PRELOAD = if ($env:A0_PRELOAD) { $env:A0_PRELOAD } else { "1" }
 # Local embeddings through onnxruntime instead of torch (-~400 MB RSS, ~-9 s load).
@@ -90,21 +91,22 @@ foreach ($dir in $dirs) {
     New-Item -ItemType Directory -Force -Path (Join-Path $PSScriptRoot "usr\$dir") | Out-Null
 }
 
-if (-not $env:ALLOWED_ORIGINS) {
-    $origins = @("http://localhost:$port", "http://127.0.0.1:$port")
-    if ($hostAddr -in @("0.0.0.0", "::")) {
-        $hostName = $env:COMPUTERNAME
-        if ($hostName) { $origins += "http://${hostName}:$port" }
-        try {
-            $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
-                Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } |
-                Select-Object -First 1 -ExpandProperty IPAddress)
-            if ($ip) { $origins += "http://${ip}:$port" }
-        } catch { }
-    } else {
-        $origins += "http://${hostAddr}:$port"
-    }
-    $env:ALLOWED_ORIGINS = ($origins | Select-Object -Unique) -join ","
+$origins = @("http://localhost:$port", "http://127.0.0.1:$port")
+if ($hostAddr -in @("0.0.0.0", "::")) {
+    $hostName = $env:COMPUTERNAME
+    if ($hostName) { $origins += "http://${hostName}:$port" }
+    try {
+        $ip = (Get-NetIPAddress -AddressFamily IPv4 -ErrorAction SilentlyContinue |
+            Where-Object { $_.IPAddress -notlike "127.*" -and $_.IPAddress -notlike "169.254.*" } |
+            Select-Object -First 1 -ExpandProperty IPAddress)
+        if ($ip) { $origins += "http://${ip}:$port" }
+    } catch { }
+} else {
+    $origins += "http://${hostAddr}:$port"
 }
+if ($env:ALLOWED_ORIGINS) {
+    $origins += $env:ALLOWED_ORIGINS -split ','
+}
+$env:ALLOWED_ORIGINS = (($origins | ForEach-Object { $_.Trim() } | Where-Object { $_ }) | Select-Object -Unique) -join ","
 
 & $python run_ui.py "--host=$hostAddr" "--port=$port" @args

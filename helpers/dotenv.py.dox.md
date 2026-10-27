@@ -24,6 +24,8 @@
 - Observed side-effect areas: filesystem reads, filesystem writes, secret handling.
 - Imported dependency areas include: `dotenv`, `files`, `os`, `re`, `typing`.
 - `save_dotenv_value(..., reload_env=False)` updates the persisted file without changing the running process environment.
+- `load_dotenv()` uses python-dotenv's `override=False`: the process environment (including launcher-derived values like `ALLOWED_ORIGINS` from `run-baremetal.*`) always wins over `usr/.env`; keys absent from the process environment are still loaded from the file. A stale `.env` line can therefore never silently clobber launcher-derived env at startup.
+- `save_dotenv_value(..., reload_env=True)` writes the file and then sets only `os.environ[key] = value` for the saved key; it never re-loads the whole file, so other `.env` keys cannot hijack environment variables that the launcher exported.
 
 ## Key Concepts
 

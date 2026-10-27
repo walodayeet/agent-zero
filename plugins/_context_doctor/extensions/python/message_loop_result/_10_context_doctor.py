@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Any, override
 
 from helpers import extract_tools
@@ -14,6 +15,20 @@ from plugins._context_doctor.helpers.context_doctor import (
     transform_response,
     update_log_item,
 )
+
+
+_TOOL_NARRATION_RE = re.compile(
+    r"(?i)\b(?:let me|i'?ll|i am going to|i'?m going to|let'?s)\s+"
+    r"(?:check|run|look|search|read|open|inspect|test|verify|execute|try)\b"
+)
+
+
+def _plain_text_is_answer(setting: Any, response: str) -> bool:
+    if setting is False:
+        return False
+    if setting is True:
+        return True
+    return not _TOOL_NARRATION_RE.search(response)
 
 
 class ContextDoctor(Extension):
@@ -49,6 +64,29 @@ class ContextDoctor(Extension):
 
         # Treat as raw-text fallback when no usable tool call was extracted
         if not is_tool_call:
+            accept_plain = _plain_text_is_answer(
+                config.get("plain_text_as_response", "auto"), response
+            ) and not extract_tools.is_misformatted_tool_request(response)
+            if accept_plain and transformed not in ("", "{}") and response.strip():
+                # Return the plain reply as a response tool call: no second model
+                # round-trip just to satisfy the tool-call protocol.
+                text = response.strip()
+                llm_result.response = json.dumps(
+                    {"thoughts": [], "tool_name": "response", "tool_args": {"text": text}},
+                    ensure_ascii=False,
+                    separators=(",", ":"),
+                )
+                log_item = self.agent.loop_data.params_temporary.get("log_item_generating")
+                if log_item is not None:
+                    update_log_item(
+                        self.agent,
+                        log_item,
+                        llm_result.response,
+                        update_log=config.get("update_log", False),
+                        raw_response=response,
+                    )
+                return
+
             # Manually add ai response and warnings
             log_item = self.agent.loop_data.params_temporary.get("log_item_generating")
             self.agent.hist_add_ai_response(

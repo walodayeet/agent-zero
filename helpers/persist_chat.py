@@ -1,13 +1,15 @@
 import json
 import os
 import tempfile
+import threading
+import time
 import uuid
 from collections import OrderedDict
 from datetime import datetime
 from typing import Any
 
 from agent import Agent, AgentConfig, AgentContext, AgentContextType
-from helpers import files, history, settings
+from helpers import files, history, settings, turn_journal
 from helpers.litellm_transport import delete_stored_response_ids
 from helpers.localization import Localization
 from initialize import initialize_agent
@@ -57,6 +59,7 @@ def save_tmp_chat(context: AgentContext):
     data = _serialize_context(context)
     js = _safe_json_serialize(data, ensure_ascii=False)
     _write_atomic(path, js)
+    update_chat_index(context)
     mark_chat_saved(context)
 
 
@@ -86,11 +89,246 @@ def load_tmp_chats():
                 js = files.read_file(file)
                 data = json.loads(js)
                 ctx = _deserialize_context(data)
+                if turn_journal.incomplete(ctx.id):
+                    ctx.data["turn_journal_incomplete"] = True
+                    if str(settings.get_settings().get("turn_journal_resume") or "report") == "report":
+                        turn_journal.append(ctx.id, "turn_resumed")
                 mark_chat_saved(ctx)
                 ctxids.append(ctx.id)
             except Exception as e:
                 print(f"Error loading chat {file}: {e}")
     return ctxids
+
+
+CHAT_INDEX_FILE_NAME = ".a0_chat_index.json"
+_INDEX_LOCK = threading.RLock()
+_INDEX_META_CACHE: dict[str, dict[str, Any]] | None = None
+
+
+def _chat_index_path() -> str:
+    return files.get_abs_path("usr", CHAT_INDEX_FILE_NAME)
+
+
+def _chat_meta_from_data(data: dict[str, Any]) -> dict[str, Any]:
+    """Compact sidebar metadata, without histories/log bodies."""
+    ctxid = str(data.get("id") or "")
+    created = data.get("created_at") or _fallback_datetime_iso()
+    log = data.get("log") or {}
+    logs = log.get("logs") if isinstance(log, dict) else None
+    output_data = data.get("output_data") if isinstance(data.get("output_data"), dict) else {}
+    return {
+        "id": ctxid,
+        "name": data.get("name") or ctxid,
+        "created_at": created,
+        "no": 0,
+        "log_guid": (log.get("guid") if isinstance(log, dict) else "") or "",
+        "log_version": len(logs) if isinstance(logs, list) else 0,
+        "log_length": len(logs) if isinstance(logs, list) else 0,
+        "paused": False,
+        "last_message": data.get("last_message") or created,
+        "type": data.get("type") or AgentContextType.USER.value,
+        "running": False,
+        "agent_profile": data.get("agent_profile") or "",
+        **output_data,
+    }
+
+
+def _read_chat_index() -> dict[str, Any]:
+    path = _chat_index_path()
+    if not files.exists(path):
+        return {"version": 1, "entries": {}}
+    try:
+        data = json.loads(files.read_file(path))
+        if isinstance(data, dict) and isinstance(data.get("entries"), dict):
+            return data
+    except Exception:
+        pass
+    return {"version": 1, "entries": {}}
+
+
+def _write_chat_index(index: dict[str, Any]) -> None:
+    _write_atomic(_chat_index_path(), json.dumps(index, ensure_ascii=False))
+
+
+def refresh_chat_index() -> dict[str, Any]:
+    """Build/refresh the sidebar metadata index by stat-ing chat files.
+
+    Only chats whose file changed since the indexed size/mtime are parsed. The
+    index lets startup render the sidebar without deserializing every history.
+    """
+    with _INDEX_LOCK:
+        return _refresh_chat_index_locked()
+
+
+def _refresh_chat_index_locked() -> dict[str, Any]:
+    global _INDEX_META_CACHE
+    index = _read_chat_index()
+    entries: dict[str, Any] = index.get("entries") or {}
+    root = files.get_abs_path(CHATS_FOLDER)
+    seen: set[str] = set()
+    dirty = False
+    try:
+        folders = [entry for entry in os.scandir(root) if entry.is_dir(follow_symlinks=False)]
+    except OSError:
+        folders = []
+    for folder in folders:
+        ctxid = folder.name
+        chat_file = os.path.join(folder.path, CHAT_FILE_NAME)
+        try:
+            stat = os.stat(chat_file)
+        except OSError:
+            continue
+        seen.add(ctxid)
+        cached = entries.get(ctxid) or {}
+        signature = [stat.st_mtime_ns, stat.st_size]
+        if cached.get("signature") == signature and isinstance(cached.get("meta"), dict):
+            continue
+        try:
+            data = json.loads(files.read_file(chat_file))
+            meta = _chat_meta_from_data(data)
+        except Exception:
+            continue
+        entries[ctxid] = {"signature": signature, "meta": meta}
+        dirty = True
+    for ctxid in list(entries):
+        if ctxid not in seen:
+            entries.pop(ctxid, None)
+            dirty = True
+    if dirty:
+        index = {"version": 1, "entries": entries}
+        _write_chat_index(index)
+    _INDEX_META_CACHE = {
+        ctxid: dict(entry["meta"])
+        for ctxid, entry in entries.items()
+        if isinstance(entry.get("meta"), dict)
+    }
+    return index
+
+
+def indexed_chat_outputs() -> list[dict[str, Any]]:
+    """Return cached sidebar metadata. No per-push disk scan or JSON refresh."""
+    global _INDEX_META_CACHE
+    with _INDEX_LOCK:
+        if _INDEX_META_CACHE is None:
+            index = _read_chat_index()
+            _INDEX_META_CACHE = {
+                ctxid: dict(entry["meta"])
+                for ctxid, entry in (index.get("entries") or {}).items()
+                if isinstance(entry.get("meta"), dict)
+            }
+        return [dict(row) for row in _INDEX_META_CACHE.values()]
+
+
+def _cache_index_meta(ctxid: str, meta: dict[str, Any] | None) -> None:
+    global _INDEX_META_CACHE
+    with _INDEX_LOCK:
+        if _INDEX_META_CACHE is None:
+            _INDEX_META_CACHE = {}
+        if meta is None:
+            _INDEX_META_CACHE.pop(ctxid, None)
+        else:
+            _INDEX_META_CACHE[ctxid] = dict(meta)
+
+
+def _chat_meta_from_context(context: AgentContext) -> dict[str, Any]:
+    output_data = {
+        k: v
+        for k, v in (getattr(context, "output_data", None) or {}).items()
+        if not k.startswith("_")
+    }
+    log = getattr(context, "log", None)
+    profile = ""
+    agent = getattr(context, "agent0", None)
+    if agent is not None and getattr(agent, "config", None) is not None:
+        profile = str(getattr(agent.config, "profile", "") or "")
+    elif getattr(context, "config", None) is not None:
+        profile = str(getattr(context.config, "profile", "") or "")
+    return {
+        "id": context.id,
+        "name": getattr(context, "name", None) or context.id,
+        "created_at": (
+            Localization.get().serialize_datetime(getattr(context, "created_at", None))
+            if getattr(context, "created_at", None)
+            else _fallback_datetime_iso()
+        ),
+        "no": getattr(context, "no", 0),
+        "log_guid": getattr(log, "guid", "") or "",
+        "log_version": len(getattr(log, "updates", []) or []),
+        "log_length": len(getattr(log, "logs", []) or []),
+        "paused": bool(getattr(context, "paused", False)),
+        "last_message": (
+            Localization.get().serialize_datetime(getattr(context, "last_message", None))
+            if getattr(context, "last_message", None)
+            else _fallback_datetime_iso()
+        ),
+        "type": getattr(getattr(context, "type", None), "value", AgentContextType.USER.value),
+        "running": False,
+        "agent_profile": profile,
+        **output_data,
+    }
+
+
+def update_chat_index(context: AgentContext) -> None:
+    try:
+        chat_file = _get_chat_file_path(context.id)
+        stat = os.stat(chat_file)
+    except Exception:
+        return
+    try:
+        meta = _chat_meta_from_context(context)
+        with _INDEX_LOCK:
+            index = _read_chat_index()
+            entries = index.setdefault("entries", {})
+            entries[context.id] = {
+                "signature": [stat.st_mtime_ns, stat.st_size],
+                "meta": meta,
+            }
+            _write_chat_index({"version": 1, "entries": entries})
+            _cache_index_meta(context.id, meta)
+    except Exception:
+        return
+
+
+def remove_chat_index_entry(ctxid: str) -> None:
+    with _INDEX_LOCK:
+        index = _read_chat_index()
+        entries = index.get("entries") or {}
+        if ctxid in entries:
+            entries.pop(ctxid, None)
+            _write_chat_index({"version": 1, "entries": entries})
+        _cache_index_meta(ctxid, None)
+
+
+_HYDRATE_LOCKS: dict[str, threading.Lock] = {}
+_HYDRATE_LOCKS_GUARD = threading.Lock()
+
+
+def load_chat(ctxid: str) -> AgentContext | None:
+    """Hydrate one saved chat on demand (single-flight, no-op if in memory)."""
+    existing = AgentContext.get(ctxid)
+    if existing:
+        return existing
+    with _HYDRATE_LOCKS_GUARD:
+        lock = _HYDRATE_LOCKS.setdefault(ctxid, threading.Lock())
+    with lock:
+        existing = AgentContext.get(ctxid)
+        if existing:
+            return existing
+        path = _get_chat_file_path(ctxid)
+        if not files.exists(path):
+            return None
+        try:
+            data = json.loads(files.read_file(path))
+        except Exception:
+            return None
+        context = _deserialize_context(data)
+        if turn_journal.incomplete(ctxid):
+            context.data["turn_journal_incomplete"] = True
+            if str(settings.get_settings().get("turn_journal_resume") or "report") == "report":
+                turn_journal.append(ctxid, "turn_resumed")
+        mark_chat_saved(context)
+        update_chat_index(context)
+        return context
 
 
 def _get_chat_file_path(ctxid: str):
@@ -208,6 +446,7 @@ def remove_chat(ctxid):
     _delete_provider_responses_for_chat(ctxid)
     path = get_chat_folder_path(ctxid)
     files.delete_dir(path)
+    remove_chat_index_entry(ctxid)
 
 
 def remove_msg_files(ctxid):

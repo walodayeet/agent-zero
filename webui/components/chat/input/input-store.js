@@ -62,6 +62,7 @@ const model = {
   chatMoreMenuOpen: false,
   progressText: "",
   progressActive: false,
+  _sending: false,
 
   get message() {
     return this._message;
@@ -150,21 +151,36 @@ const model = {
   },
 
   async sendMessage() {
+    if (this._sending) return;
     this._syncMessageFromEditor();
     const pendingMessage = this.message;
+    const hasContent =
+      Boolean(this.message.trim()) ||
+      Boolean(attachmentsStore?.attachments?.length > 0);
+    if (!hasContent) return;
 
-    if (!chatsStore.selected && (this.message.trim() || attachmentsStore?.attachments?.length > 0)) {
-      const ctxid = await chatsStore.newChat();
-      if (!ctxid && !chatsStore.selected) return;
-      this.message = pendingMessage;
-    }
+    this._sending = true;
+    const sendWatchdog = setTimeout(() => {
+      // Optional JS extensions must never wedge the composer forever.
+      this._sending = false;
+    }, 15000);
+    try {
+      if (!chatsStore.selected) {
+        const ctxid = await chatsStore.newChat();
+        if (!ctxid && !chatsStore.selected) return;
+        this.message = pendingMessage;
+      }
 
-    // Capture sent prompt to per-chat history (bash-style)
-    try { this._pushHistory(this.message); } catch (_e) { /* ignore */ }
+      // Capture sent prompt to per-chat history (bash-style)
+      try { this._pushHistory(this.message); } catch (_e) { /* ignore */ }
 
-    // Delegate to the global function
-    if (globalThis.sendMessage) {
-      await globalThis.sendMessage();
+      // Delegate to the global function
+      if (globalThis.sendMessage) {
+        await globalThis.sendMessage();
+      }
+    } finally {
+      clearTimeout(sendWatchdog);
+      this._sending = false;
     }
   },
 
@@ -258,7 +274,10 @@ const model = {
   },
 
   _syncMessageFromEditor() {
-    if (!this._editorEl) return;
+    // The composer can receive Enter before x-create has run; resolve it on demand.
+    const editor = this._editorEl || document.getElementById("chat-input");
+    if (!editor) return;
+    this._editorEl = editor;
     this._message = this._editorToMarkdown();
     this._setEditorEmptyState();
     this._saveDraft();
@@ -401,6 +420,7 @@ const model = {
     if ($event.isComposing || $event.keyCode === 229) return;
 
     if ($event.key === "Enter") {
+      if ($event.repeat) return;
       if (this._isInCodeBlock($event.target)) return;
       if (!$event.shiftKey) {
         if (this._tryCreateCodeBlock($event)) return;

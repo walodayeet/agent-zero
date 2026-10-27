@@ -50,8 +50,11 @@ def _iter_prompt_files():
 @pytest.fixture(autouse=True)
 def _bundled_skill_roots_only(monkeypatch):
     """Keep prompt-budget assertions hermetic: local `usr/skills` are user data."""
-    from helpers import skills as skills_helper
+    from helpers import cache, modules, skills as skills_helper
 
+    cache.clear("*(extensions)*")
+    cache.clear("*(plugins)*")
+    modules.purge_namespace("usr.plugins")
     original = skills_helper.get_skill_roots
     usr_root = str(PROJECT_ROOT / "usr")
 

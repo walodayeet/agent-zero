@@ -1,3 +1,4 @@
+import os
 from typing import Any
 
 from helpers.extension import Extension, extensible
@@ -27,8 +28,16 @@ async def build_prompt(agent: Agent) -> str:
 
     available = skills_helper.list_skills(agent=agent)
     result: list[str] = []
+    # Large catalogs dominate the prompt (100+ skills ≈ 5k tokens per model
+    # call). Keep names only; descriptions stay discoverable through
+    # skills_tool search/list.
+    compact_at = int(os.environ.get("A0_COMPACT_SKILLS_AT", "30"))
+    compact = len(available) > compact_at
     for skill in available:
         name = skill.name.strip().replace("\n", " ")[:100]
+        if compact:
+            result.append(f"- {name}")
+            continue
         descr = skill.description.replace("\n", " ").strip()
         if len(descr) > 100:
             descr = descr[:100].rstrip() + "..."

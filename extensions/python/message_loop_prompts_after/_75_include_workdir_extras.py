@@ -62,18 +62,21 @@ class IncludeWorkdirExtras(Extension):
             files.create_dir(scan_path)
 
             # Same for the default workdir scan; it may walk a large tree.
-            file_structure = str(
-                await asyncio.to_thread(
-                    file_tree.file_tree,
-                    scan_path,
-                    max_depth=max_depth,
-                    max_files=max_files,
-                    max_folders=max_folders,
-                    max_lines=max_lines,
-                    ignore=gitignore_raw,
-                    output_mode=file_tree.OUTPUT_MODE_INDENT,
+            async def _render_tree() -> str:
+                return str(
+                    await asyncio.to_thread(
+                        file_tree.file_tree,
+                        scan_path,
+                        max_depth=max_depth,
+                        max_files=max_files,
+                        max_folders=max_folders,
+                        max_lines=max_lines,
+                        ignore=gitignore_raw,
+                        output_mode=file_tree.OUTPUT_MODE_INDENT,
+                    )
                 )
-            )
+
+            file_structure = await _render_tree()
 
         gitignore = cleanup_gitignore(gitignore_raw)
 
