@@ -64,7 +64,7 @@ if (-not $env:A0_DATA_DIR -and -not (Test-Path $dataConf)) {
     $fallback = Join-Path $env:USERPROFILE "agent-zero\$instance\usr"
     if (-not $hasData) {
         $answer = ""
-        if ($Host.Name -eq "Console" -and -not $env:A0_NO_ONBOARDING) {
+        if ([Environment]::UserInteractive -and -not $env:A0_NO_ONBOARDING) {
             $answer = Read-Host "Agent Zero data directory [$fallback] (enter 'local' to keep $usrPath)"
         }
         if (-not $answer) { $env:A0_DATA_DIR = $fallback }

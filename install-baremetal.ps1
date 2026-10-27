@@ -155,7 +155,7 @@ function Test-UsrData([string]$path) {
 }
 if (-not $DataDir -and -not (Test-UsrData $usr)) {
     $fallback = Join-Path $env:USERPROFILE "agent-zero\$Instance\usr"
-    if (-not $NonInteractive -and $Host.Name -eq "Console") {
+    if (-not $NonInteractive -and [Environment]::UserInteractive -and -not $env:A0_NO_ONBOARDING) {
         $answer = Read-Host "Agent Zero data directory [$fallback] (enter 'local' to keep $usr)"
         if (-not $answer) { $DataDir = $fallback }
         elseif ($answer -in @("local", "./usr", "usr")) { $DataDir = "" }
